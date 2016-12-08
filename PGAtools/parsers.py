@@ -7,5 +7,6 @@ def populate(subparsers):
                                    formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument("--input", "-i", default="input.rdf", type=argparse.FileType('r'),
                         help="RDF inputfile")
+    parser.add_argument("--parser", "-p", default='reaxys', choices=['reaxys'], type=str, help="Data Format")
 
     parser.set_defaults(func=populate_core)
