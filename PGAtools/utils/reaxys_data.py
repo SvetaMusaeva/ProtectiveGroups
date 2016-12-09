@@ -18,7 +18,7 @@ class Parser(object):
             if section in self.__fields:
                 if presection and presection[-1].startswith('RXD('):
                     if section in ('CAT', 'SOL', 'RGT'):
-                        rxds[presection[-1]].setdefault('media', []).append(meta_value)
+                        rxds[presection[-1]].setdefault('media', []).extend(meta_value.split('|'))
                     else:
                         rxds[presection[-1]][section] = meta_value
                 else:
