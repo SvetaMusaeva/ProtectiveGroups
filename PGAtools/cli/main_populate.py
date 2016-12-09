@@ -9,7 +9,7 @@ parsers = dict(reaxys=ReaxysParser)
 
 def populate_core(**kwargs):
     inputdata = RDFread(kwargs['input'])
-    data_parser = parsers[kwargs['parser']]
+    data_parser = parsers[kwargs['parser']]()
 
     err = 0
     num = 0
@@ -18,6 +18,7 @@ def populate_core(**kwargs):
             print("reaction: %d" % num, file=sys.stderr)
         try:
             meta = data_parser.parse(data['meta'])
+
         except Exception:
             err += 1
             print('reaction %d consist errors: %s' % (num, traceback.format_exc()), file=sys.stderr)
