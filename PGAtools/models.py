@@ -1,12 +1,26 @@
 from pony.orm import *
+from networkx import relabel_nodes
+from bitstring import BitArray
 from networkx.readwrite.json_graph import node_link_graph, node_link_data
 from CGRtools.FEAR import FEAR
+from CGRtools.CGRreactor import CGRreactor
 from CGRtools.CGRcore import CGRcore
+from CGRtools.files.SDFrw import SDFwrite
+from io import StringIO
+from MODtools.descriptors.fragmentor import Fragmentor
+from .fingerprints import get_fingerprint
 
 
 db = Database()
 fear = FEAR()
 cgr_core = CGRcore()
+cgr_reactor = CGRreactor()
+
+# todo: set config
+structure_fragmentor = Fragmentor(workpath='.', version='15.36', fragment_type=3, min_length=2, max_length=10,
+                                  doallways=True, useformalcharge=True, header=open('header'))
+cgr_fragmentor = Fragmentor(workpath='.', version='15.36', fragment_type=3, min_length=2, max_length=10,
+                            cgr_dynbonds=1, doallways=True, useformalcharge=True, header=open('header'))
 
 
 class Conditions(db.Entity):
@@ -24,7 +38,7 @@ class Conditions(db.Entity):
     TEXT = Optional(LongStr)
     rx_id = Required(int)
     raw_medias = Set('RawMedia')
-    structure = Required('Structures')
+    reaction = Required('Reactions')
 
 
 class Groups(db.Entity):
@@ -32,7 +46,7 @@ class Groups(db.Entity):
     name = Required(str)
     query_leave_data = Required(Json)
     query_remain_data = Required(Json)
-    structures = Set('GroupStructure')
+    reactions = Set('GroupReaction')
 
     def __init__(self, name, query_leave, query_remain):
         query_leave_data = node_link_data(query_leave)
@@ -51,33 +65,94 @@ class Groups(db.Entity):
 class Structures(db.Entity):
     id = PrimaryKey(int, auto=True)
     data = Required(Json)
-    structure_hash = Required(str)
-    CGR_data = Required(Json)
+    string = Required(str)
+    fingerprint = Required(bytes)
+
+    reagents = Set('Reactions', reverse='reagents')
+    products = Set('Reactions', reverse='products')
+
+    def __init__(self, structure, fingerprint=None):
+        structure_string = fear.getreactionhash(structure)
+        data = node_link_data(structure)
+        if fingerprint is None:
+            with StringIO() as f:
+                SDFwrite(f).write(structure)
+                f.seek(0)
+                s = structure_fragmentor.get(f)['X'][0].loc[0]
+                fingerprint = get_fingerprint(s)
+
+        self.__cached_structure = structure
+        super(Structures, self).__init__(data=data, string=structure_string, fingerprint=fingerprint.bytes)
+
+    @property
+    def structure(self):
+        if self.__cached_structure is None:
+            self.__cached_structure = node_link_graph(self.data)
+        return self.__cached_structure
+
+    @property
+    def bitstring_fingerprint(self):
+        return BitArray(self.fingerprint)
+
+    __cached_structure = None
+
+
+class Reactions(db.Entity):
+    id = PrimaryKey(int, auto=True)
+    mapping = Required(Json)
+    string = Required(str)
+    fingerprint = Required(bytes)
+
+    reagents = Set(Structures, reverse='reagents')
+    products = Set(Structures, reverse='products')
     conditions = Set(Conditions, cascade_delete=True)
-    groups = Set('GroupStructure')
+    groups = Set('GroupReaction')
 
-    def __init__(self, reaction):
-        tmp = reaction.copy()
-        tmp['meta'] = {}
+    def __init__(self, reaction, fingerprint=None):
+        r = [Structures.get(string=fear.getreactionhash(x)) or Structures(x) for x in reaction['substrats']]
+        p = [Structures.get(string=fear.getreactionhash(x)) or Structures(x) for x in reaction['products']]
 
-        cgr = cgr_core.getCGR(tmp)
+        mapping = [[next(cgr_reactor.spgraphmatcher(x, y).isomorphisms_iter())
+                    for x, y in zip(r, reaction['substrats'])],
+                   [next(cgr_reactor.spgraphmatcher(x, y).isomorphisms_iter())
+                    for x, y in zip(p, reaction['products'])]]
 
-        CGR_data = node_link_data(cgr)
-        json_data = {'substrats': [node_link_data(x) for x in tmp['substrats']],
-                     'products': [node_link_data(x) for x in tmp['products']], 'meta': {}}
+        cgr = cgr_core.getCGR(reaction)
+        cgr_string = fear.getreactionhash(cgr)
 
-        structure_hash = fear.getreactionhash(cgr)
+        if fingerprint is None:
+            with StringIO() as f:
+                SDFwrite(f).write(cgr)
+                f.seek(0)
+                s = cgr_fragmentor.get(f)['X'][0].loc[0]
+                fingerprint = get_fingerprint(s)
 
-        super(Structures, self).__init__(data=json_data, structure_hash=structure_hash, CGR_data=CGR_data)
+        self.__cached_cgr = cgr
+        self.__cached_reaction = reaction
+        super(Reactions, self).__init__(reagents=r, products=p, string=cgr_string, fingerprint=fingerprint,
+                                        mapping=mapping)
 
     @property
-    def reaction(self):
-        return {'substrats': [node_link_graph(x) for x in self.data['substrats']],
-                'products': [node_link_graph(x) for x in self.data['products']], 'meta': {}}
+    def cgr(self):
+        if self.__cached_cgr is None:
+            self.__cached_cgr = cgr_core.getCGR(self.reaction)
+        return self.__cached_cgr
 
     @property
-    def CGR(self):
-        return node_link_graph(self.CGR_data)
+    def reaction(self):  # todo: need order!
+        if self.__cached_reaction is None:
+            self.__cached_reaction = {'substrats': [relabel_nodes(x.structure, m, copy=True)
+                                                    for x, m in zip(self.reagents, self.mapping[0])],
+                                      'products': [relabel_nodes(x.structure, m, copy=True)
+                                                   for x, m in zip(self.products, self.mapping[1])], 'meta': {}}
+        return self.__cached_reaction
+
+    @property
+    def bitstring_fingerprint(self):
+        return BitArray(self.fingerprint)
+
+    __cached_reaction = None
+    __cached_cgr = None
 
 
 class Tags(db.Entity):
@@ -93,14 +168,14 @@ class Media(db.Entity):
     tags = Set(Tags)
 
 
-class GroupStructure(db.Entity):
+class GroupReaction(db.Entity):
     group = Required(Groups)
-    structure = Required(Structures)
+    reaction = Required(Reactions)
     cleavage = Required(bool, default=False)
     remain = Required(bool, default=False)
     transform = Required(bool, default=False)
     fingerprint = Optional(bytes)
-    PrimaryKey(group, structure)
+    PrimaryKey(group, reaction)
 
 
 class RawMedia(db.Entity):
