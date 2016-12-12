@@ -67,9 +67,7 @@ class Structures(db.Entity):
     data = Required(Json)
     string = Required(str)
     fingerprint = Required(bytes)
-
-    reagents = Set('Reactions', reverse='reagents')
-    products = Set('Reactions', reverse='products')
+    reactions = Set('StructureReaction')
 
     def __init__(self, structure, fingerprint=None):
         structure_string = fear.getreactionhash(structure)
@@ -99,24 +97,14 @@ class Structures(db.Entity):
 
 class Reactions(db.Entity):
     id = PrimaryKey(int, auto=True)
-    mapping = Required(Json)
     string = Required(str)
     fingerprint = Required(bytes)
 
-    reagents = Set(Structures, reverse='reagents')
-    products = Set(Structures, reverse='products')
+    structures = Set('StructureReaction')
     conditions = Set(Conditions, cascade_delete=True)
     groups = Set('GroupReaction')
 
     def __init__(self, reaction, fingerprint=None):
-        r = [Structures.get(string=fear.getreactionhash(x)) or Structures(x) for x in reaction['substrats']]
-        p = [Structures.get(string=fear.getreactionhash(x)) or Structures(x) for x in reaction['products']]
-
-        mapping = [[next(cgr_reactor.spgraphmatcher(x, y).isomorphisms_iter())
-                    for x, y in zip(r, reaction['substrats'])],
-                   [next(cgr_reactor.spgraphmatcher(x, y).isomorphisms_iter())
-                    for x, y in zip(p, reaction['products'])]]
-
         cgr = cgr_core.getCGR(reaction)
         cgr_string = fear.getreactionhash(cgr)
 
@@ -129,8 +117,18 @@ class Reactions(db.Entity):
 
         self.__cached_cgr = cgr
         self.__cached_reaction = reaction
-        super(Reactions, self).__init__(reagents=r, products=p, string=cgr_string, fingerprint=fingerprint,
-                                        mapping=mapping)
+        super(Reactions, self).__init__(string=cgr_string, fingerprint=fingerprint)
+
+        r = [Structures.get(string=fear.getreactionhash(x)) or Structures(x) for x in reaction['substrats']]
+        p = [Structures.get(string=fear.getreactionhash(x)) or Structures(x) for x in reaction['products']]
+
+        for s, x in zip(r, reaction['substrats']):
+            StructureReaction(reaction=self, structure=s, product=False,
+                              mapping=next(cgr_reactor.spgraphmatcher(s, x).isomorphisms_iter()))
+
+        for s, x in zip(p, reaction['products']):
+            StructureReaction(reaction=self, structure=s, product=True,
+                              mapping=next(cgr_reactor.spgraphmatcher(s, x).isomorphisms_iter()))
 
     @property
     def cgr(self):
@@ -141,10 +139,12 @@ class Reactions(db.Entity):
     @property
     def reaction(self):  # todo: need order!
         if self.__cached_reaction is None:
-            self.__cached_reaction = {'substrats': [relabel_nodes(x.structure, m, copy=True)
-                                                    for x, m in zip(self.reagents, self.mapping[0])],
-                                      'products': [relabel_nodes(x.structure, m, copy=True)
-                                                   for x, m in zip(self.products, self.mapping[1])], 'meta': {}}
+            tmp = dict(substrats=[], products=[], meta={})
+
+            for x in self.structures:
+                tmp['products' if x.product else 'substrats'].append(relabel_nodes(x.structure.structure, x.mapping,
+                                                                                   copy=True))
+            self.__cached_reaction = tmp
         return self.__cached_reaction
 
     @property
@@ -153,6 +153,14 @@ class Reactions(db.Entity):
 
     __cached_reaction = None
     __cached_cgr = None
+
+
+class StructureReaction(db.Entity):
+    id = PrimaryKey(int, auto=True)
+    reaction = Required(Reactions)
+    structure = Required(Structures)
+    product = Required(bool, default=False)
+    mapping = Required(Json)
 
 
 class Tags(db.Entity):
