@@ -1,7 +1,9 @@
 import sys
 import traceback
+from pony.orm import db_session
 from CGRtools.files.RDFrw import RDFread
 from ..utils.reaxys_data import Parser as ReaxysParser
+from ..models import Reactions, Structures
 
 
 parsers = dict(reaxys=ReaxysParser)
@@ -18,6 +20,8 @@ def populate_core(**kwargs):
             print("reaction: %d" % num, file=sys.stderr)
         try:
             meta = data_parser.parse(data['meta'])
+            with db_session:
+                Reactions(data, conditions=meta['rxd'], rx_id=meta['rx_id'])
 
         except Exception:
             err += 1

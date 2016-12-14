@@ -29,18 +29,15 @@ cgr_fragmentor = Fragmentor(workpath='.', version=FRAGMENTOR_VERSION, fragment_t
 
 class Conditions(db.Entity):
     id = PrimaryKey(int, auto=True)
-    CL = Optional(str)
-    LB = Optional(str)
-    T = Optional(str)
-    P = Optional(str)
-    TIM = Optional(str)
-    STP = Optional(str)
-    YD = Optional(str)
-    NYD = Optional(str)
-    YPRO = Optional(str)
-    CIT = Optional(LongStr)
-    TEXT = Optional(LongStr)
-    rx_id = Required(int)
+    citation = Optional(LongStr)
+    comment = Optional(str)
+    conditions = Optional(str)
+    description = Optional(LongStr)
+    pressure = Optional(str)
+    product_yield = Optional(str)
+    steps = Optional(str)
+    temperature = Optional(str)
+    time = Optional(str)
     raw_medias = Set('RawMedia')
     reaction = Required('Reactions')
 
@@ -69,7 +66,7 @@ class Groups(db.Entity):
 class Structures(db.Entity):
     id = PrimaryKey(int, auto=True)
     data = Required(Json)
-    string = Required(str)
+    string = Required(str, unique=True)
     fingerprint = Required(bytes)
     reactions = Set('StructureReaction')
 
@@ -101,14 +98,15 @@ class Structures(db.Entity):
 
 class Reactions(db.Entity):
     id = PrimaryKey(int, auto=True)
-    string = Required(str)
+    rx_id = Optional(int)
+    string = Required(str, unique=True)
     fingerprint = Required(bytes)
 
     structures = Set('StructureReaction')
     conditions = Set(Conditions, cascade_delete=True)
     groups = Set('GroupReaction')
 
-    def __init__(self, reaction, fingerprint=None):
+    def __init__(self, reaction, conditions=None, fingerprint=None, **db_ids):
         cgr = cgr_core.getCGR(reaction)
         cgr_string = fear.getreactionhash(cgr)
 
@@ -121,14 +119,21 @@ class Reactions(db.Entity):
 
         self.__cached_cgr = cgr
         self.__cached_reaction = reaction
-        super(Reactions, self).__init__(string=cgr_string, fingerprint=fingerprint)
+        super(Reactions, self).__init__(string=cgr_string, fingerprint=fingerprint.bytes,
+                                        **{x: y for x, y in db_ids.items() if y})
 
-        for i, is_p in (('products', True), ('substrats', False)):
+        for i, is_p in (('substrats', False), ('products', True)):
             for x in reaction[i]:
                 s = Structures.get(string=fear.getreactionhash(x)) or Structures(x)
 
                 StructureReaction(reaction=self, structure=s, product=is_p,
                                   mapping=next(cgr_reactor.spgraphmatcher(s.structure, x).isomorphisms_iter()))
+
+        for c in conditions or []:
+            media = c.pop('media')
+            cond = Conditions(reaction=self, **c)
+            for m in media:
+                cond.raw_medias.add(RawMedia.get(name=m) or RawMedia(name=m))
 
     @property
     def cgr(self):
@@ -141,7 +146,7 @@ class Reactions(db.Entity):
         if self.__cached_reaction is None:
             tmp = dict(substrats=[], products=[], meta={})
 
-            for x in self.structures:  # potentially optimizable
+            for x in self.structures.order_by(lambda x: x.id):  # potentially optimizable
                 tmp['products' if x.product else 'substrats'].append(relabel_nodes(x.structure.structure, x.mapping,
                                                                                    copy=True))
             self.__cached_reaction = tmp
@@ -165,13 +170,13 @@ class StructureReaction(db.Entity):
 
 class Tags(db.Entity):
     id = PrimaryKey(int, auto=True)
-    tag = Optional(str)
+    name = Required(str, unique=True)
     medias = Set('Media')
 
 
 class Media(db.Entity):
     id = PrimaryKey(int, auto=True)
-    compound = Optional(str)
+    name = Required(str, unique=True)
     raw_medias = Set('RawMedia')
     tags = Set(Tags)
 
@@ -189,9 +194,10 @@ class GroupReaction(db.Entity):
 class RawMedia(db.Entity):
     id = PrimaryKey(int, auto=True)
     conditions = Set(Conditions)
+    name = Required(str, unique=True)
     media = Optional(Media)
-    component = Optional(str)
 
 
+sql_debug(True)
 db.bind("sqlite", "database.sqlite")
 db.generate_mapping(create_tables=True)

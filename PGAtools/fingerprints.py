@@ -10,7 +10,7 @@ fp_header_cgr = {v: (int(k[:-1]) * 2 % FP_SIZE, int(k[:-1]) * 3 % FP_SIZE)
 
 def get_fingerprint(s, reaction=False):
     fp = BitArray(FP_SIZE)
-    for k, v in s:
+    for k, v in s.items():
         if v:
             b1, b2 = fp_header_cgr[k] if reaction else fp_header_str[k]
             fp[b1] = fp[b2] = 1

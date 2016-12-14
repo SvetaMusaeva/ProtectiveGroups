@@ -4,25 +4,23 @@ from collections import defaultdict
 
 
 class Parser(object):
-    def __init__(self, fields=None):
+    def __init__(self):
 
-        self.__fields = fields or ['RX_ID', 'RX_NVAR', 'RX_RCT', 'RX_PRO', 'CL', 'LB', 'STP', 'TIM',
-                                   'COND', 'COM', 'YPRO', 'YD', 'NYD', 'RGT', 'CAT', 'SOL', 'citation', 'P', 'SUB',
-                                   'T', 'TXT', 'LCN']
+        self.__fields = dict(COND='conditions', COM='comment', YD='product_yield',
+                             TIM='time', STP='steps', T='temperature', P='pressure', TXT='description',
+                             citation='citation', RGT=None, CAT=None, SOL=None)
 
     def parse(self, meta):
         rxds = defaultdict(dict)
-        cleaned = {}
+        cleaned = dict(rx_id=int(meta['ROOT:RX_ID']))
+
         for meta_key, meta_value in meta.items():
             *presection, section = meta_key.split(':')
-            if section in self.__fields:
-                if presection and presection[-1].startswith('RXD('):
-                    if section in ('CAT', 'SOL', 'RGT'):
-                        rxds[presection[-1]].setdefault('media', []).extend(meta_value.split('|'))
-                    else:
-                        rxds[presection[-1]][section] = meta_value
+            if presection and section in self.__fields and presection[-1].startswith('RXD('):
+                if section in ('CAT', 'SOL', 'RGT'):
+                    rxds[presection[-1]].setdefault('media', []).extend(meta_value.split('|'))
                 else:
-                    cleaned[section] = meta_value
+                    rxds[presection[-1]][self.__fields[section]] = meta_value
 
         cleaned['rxd'] = list(rxds.values())
         return cleaned

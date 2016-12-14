@@ -12,8 +12,8 @@ class Fragmentor():
         self.__settings.read_file(sysfile)
         options = {}
         self.__Fragoptions = {}
-        for option in self.__settings.options('Fragmentor'):
-            self.__Fragoptions[option] = (self.__settings.get('Fragmentor', option)).strip().split(",")
+        for option in self.__settings.options('Fragmentor-hz'):
+            self.__Fragoptions[option] = (self.__settings.get('Fragmentor-hz', option)).strip().split(",")
         self.__Fingeroptions = {}
         for option in self.__settings.options('Fingerprints'):
             self.__Fingeroptions[option] = (self.__settings.get('Fingerprints', option)).strip()
