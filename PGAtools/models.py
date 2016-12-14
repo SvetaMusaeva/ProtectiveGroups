@@ -9,6 +9,8 @@ from CGRtools.files.SDFrw import SDFwrite
 from io import StringIO
 from MODtools.descriptors.fragmentor import Fragmentor
 from .fingerprints import get_fingerprint
+from .config import (FP_HEADER_STR, FP_HEADER_CGR, FRAGMENTOR_VERSION, FRAGMENT_TYPE_CGR, FRAGMENT_MIN_CGR,
+                     FRAGMENT_MAX_CGR, FRAGMENT_TYPE_STR, FRAGMENT_MIN_STR, FRAGMENT_MAX_STR, FRAGMENT_DYNBOND_CGR)
 
 
 db = Database()
@@ -17,10 +19,12 @@ cgr_core = CGRcore()
 cgr_reactor = CGRreactor()
 
 # todo: set config
-structure_fragmentor = Fragmentor(workpath='.', version='15.36', fragment_type=3, min_length=2, max_length=10,
-                                  doallways=True, useformalcharge=True, header=open('header'))
-cgr_fragmentor = Fragmentor(workpath='.', version='15.36', fragment_type=3, min_length=2, max_length=10,
-                            cgr_dynbonds=1, doallways=True, useformalcharge=True, header=open('header'))
+str_fragmentor = Fragmentor(workpath='.', version=FRAGMENTOR_VERSION, fragment_type=FRAGMENT_TYPE_STR,
+                            min_length=FRAGMENT_MIN_STR, max_length=FRAGMENT_MAX_STR,
+                            useformalcharge=True, header=open(FP_HEADER_STR))
+cgr_fragmentor = Fragmentor(workpath='.', version=FRAGMENTOR_VERSION, fragment_type=FRAGMENT_TYPE_CGR,
+                            min_length=FRAGMENT_MIN_CGR, max_length=FRAGMENT_MAX_CGR,
+                            cgr_dynbonds=FRAGMENT_DYNBOND_CGR, useformalcharge=True, header=open(FP_HEADER_CGR))
 
 
 class Conditions(db.Entity):
@@ -76,7 +80,7 @@ class Structures(db.Entity):
             with StringIO() as f:
                 SDFwrite(f).write(structure)
                 f.seek(0)
-                s = structure_fragmentor.get(f)['X'][0].loc[0]
+                s = str_fragmentor.get(f)['X'][0].loc[0]  # todo: remove [0] if fragmentor refactored
                 fingerprint = get_fingerprint(s)
 
         self.__cached_structure = structure
@@ -112,23 +116,19 @@ class Reactions(db.Entity):
             with StringIO() as f:
                 SDFwrite(f).write(cgr)
                 f.seek(0)
-                s = cgr_fragmentor.get(f)['X'][0].loc[0]
-                fingerprint = get_fingerprint(s)
+                s = cgr_fragmentor.get(f)['X'][0].loc[0]  # todo: see below
+                fingerprint = get_fingerprint(s, reaction=True)
 
         self.__cached_cgr = cgr
         self.__cached_reaction = reaction
         super(Reactions, self).__init__(string=cgr_string, fingerprint=fingerprint)
 
-        r = [Structures.get(string=fear.getreactionhash(x)) or Structures(x) for x in reaction['substrats']]
-        p = [Structures.get(string=fear.getreactionhash(x)) or Structures(x) for x in reaction['products']]
+        for i, is_p in (('products', True), ('substrats', False)):
+            for x in reaction[i]:
+                s = Structures.get(string=fear.getreactionhash(x)) or Structures(x)
 
-        for s, x in zip(r, reaction['substrats']):
-            StructureReaction(reaction=self, structure=s, product=False,
-                              mapping=next(cgr_reactor.spgraphmatcher(s, x).isomorphisms_iter()))
-
-        for s, x in zip(p, reaction['products']):
-            StructureReaction(reaction=self, structure=s, product=True,
-                              mapping=next(cgr_reactor.spgraphmatcher(s, x).isomorphisms_iter()))
+                StructureReaction(reaction=self, structure=s, product=is_p,
+                                  mapping=next(cgr_reactor.spgraphmatcher(s.structure, x).isomorphisms_iter()))
 
     @property
     def cgr(self):
@@ -137,11 +137,11 @@ class Reactions(db.Entity):
         return self.__cached_cgr
 
     @property
-    def reaction(self):  # todo: need order!
+    def reaction(self):
         if self.__cached_reaction is None:
             tmp = dict(substrats=[], products=[], meta={})
 
-            for x in self.structures:
+            for x in self.structures:  # potentially optimizable
                 tmp['products' if x.product else 'substrats'].append(relabel_nodes(x.structure.structure, x.mapping,
                                                                                    copy=True))
             self.__cached_reaction = tmp
