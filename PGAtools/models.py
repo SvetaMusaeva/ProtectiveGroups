@@ -74,11 +74,8 @@ class Structures(db.Entity):
         structure_string = fear.getreactionhash(structure)
         data = node_link_data(structure)
         if fingerprint is None:
-            with StringIO() as f:
-                SDFwrite(f).write(structure)
-                f.seek(0)
-                s = str_fragmentor.get(f)['X'][0].loc[0]  # todo: remove [0] if fragmentor refactored
-                fingerprint = get_fingerprint(s)
+            s = str_fragmentor.get([structure])['X'].loc[0]
+            fingerprint = get_fingerprint(s)
 
         self.__cached_structure = structure
         super(Structures, self).__init__(data=data, string=structure_string, fingerprint=fingerprint.bytes)
@@ -103,19 +100,15 @@ class Reactions(db.Entity):
     fingerprint = Required(bytes)
 
     structures = Set('StructureReaction')
-    conditions = Set(Conditions, cascade_delete=True)
+    conditions_db = Set(Conditions, cascade_delete=True)
     groups = Set('GroupReaction')
 
     def __init__(self, reaction, conditions=None, fingerprint=None, **db_ids):
-        cgr = cgr_core.getCGR(reaction)
-        cgr_string = fear.getreactionhash(cgr)
+        cgr_string, cgr = self.generate_string(reaction, get_cgr=True)
 
         if fingerprint is None:
-            with StringIO() as f:
-                SDFwrite(f).write(cgr)
-                f.seek(0)
-                s = cgr_fragmentor.get(f)['X'][0].loc[0]  # todo: see below
-                fingerprint = get_fingerprint(s, reaction=True)
+            s = cgr_fragmentor.get([cgr])['X'].loc[0]
+            fingerprint = get_fingerprint(s, reaction=True)
 
         self.__cached_cgr = cgr
         self.__cached_reaction = reaction
@@ -134,6 +127,12 @@ class Reactions(db.Entity):
             cond = Conditions(reaction=self, **c)
             for m in media:
                 cond.raw_medias.add(RawMedia.get(name=m) or RawMedia(name=m))
+
+    @staticmethod
+    def generate_string(reaction, get_cgr=False):
+        cgr = cgr_core.getCGR(reaction)
+        cgr_string = fear.getreactionhash(cgr)
+        return (cgr_string, cgr) if get_cgr else cgr_string
 
     @property
     def cgr(self):
@@ -155,6 +154,15 @@ class Reactions(db.Entity):
     @property
     def bitstring_fingerprint(self):
         return BitArray(self.fingerprint)
+
+    @property
+    def conditions(self):
+        result = []
+        for condition in self.conditions_db:
+            data = condition.to_dict(exclude='id')
+            data['media']= [x.media and x.media.name or x.name for x in condition.raw_medias]
+            result.append(data)
+        return result
 
     __cached_reaction = None
     __cached_cgr = None
