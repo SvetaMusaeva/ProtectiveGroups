@@ -1,12 +1,12 @@
 from pony.orm import *
+from collections import defaultdict
 from networkx import relabel_nodes
 from bitstring import BitArray
 from networkx.readwrite.json_graph import node_link_graph, node_link_data
 from CGRtools.FEAR import FEAR
 from CGRtools.CGRreactor import CGRreactor
 from CGRtools.CGRcore import CGRcore
-from CGRtools.files.SDFrw import SDFwrite
-from io import StringIO
+from itertools import chain
 from MODtools.descriptors.fragmentor import Fragmentor
 from .fingerprints import get_fingerprint
 from .config import (FP_HEADER_STR, FP_HEADER_CGR, FRAGMENTOR_VERSION, FRAGMENT_TYPE_CGR, FRAGMENT_MIN_CGR,
@@ -38,7 +38,7 @@ class Conditions(db.Entity):
     steps = Optional(str)
     temperature = Optional(str)
     time = Optional(str)
-    raw_medias = Set('RawMedia')
+    raw_medias = Set('RawMedias')
     reaction = Required('Reactions')
 
 
@@ -122,11 +122,36 @@ class Reactions(db.Entity):
                 StructureReaction(reaction=self, structure=s, product=is_p,
                                   mapping=next(cgr_reactor.spgraphmatcher(s.structure, x).isomorphisms_iter()))
 
+        self.__set_conditions(conditions)
+
+    def __set_conditions(self, conditions):
         for c in conditions or []:
             media = c.pop('media')
             cond = Conditions(reaction=self, **c)
             for m in media:
-                cond.raw_medias.add(RawMedia.get(name=m) or RawMedia(name=m))
+                cond.raw_medias.add(RawMedias.get(name=m) or RawMedias(name=m))
+
+    def set_conditions(self, conditions):
+        available_conditions = {x.id: x.to_dict(exclude='id') for x in self.conditions_db}
+        raw_name = left_join((c.id, rm.name) for c in Conditions if c.reaction == self for rm in c.raw_medias)
+        for i, name in raw_name:
+            available_conditions[i].setdefault('media', set()).add(name)
+
+        available_conditions = list(available_conditions.values())
+
+        to_add = []
+        for c in conditions:
+            flag = False
+            for ac in available_conditions:
+                if all((ac[key] or None) == (c.get(key) or None)
+                       for key in ('product_yield', 'temperature', 'time', 'citation', 'comment','conditions',
+                                   'description', 'pressure', 'steps')) and ac['media'] == set(c['media']):
+                    flag = True
+                    break
+            if not flag:
+                to_add.append(c)
+
+        self.__set_conditions(to_add)
 
     @staticmethod
     def generate_string(reaction, get_cgr=False):
@@ -157,15 +182,36 @@ class Reactions(db.Entity):
 
     @property
     def conditions(self):
-        result = []
-        for condition in self.conditions_db:
-            data = condition.to_dict(exclude='id')
-            data['media']= [x.media and x.media.name or x.name for x in condition.raw_medias]
-            result.append(data)
-        return result
+        if self.__cached_conditions is None:
+            result = {}
+
+            for condition in self.conditions_db:
+                data = condition.to_dict(exclude='id')
+                data['media'] = {}
+                result[condition.id] = data
+
+            clear_list = []
+            mids = set()
+            clear_name = left_join((c.id, m.name, m.id) for c in Conditions if c.reaction == self for rm in c.raw_medias if rm.media for m in rm.media)
+            for *id_name, mid in clear_name:
+                mids.add(mid)
+                clear_list.append(id_name)
+
+            tags_list = defaultdict(list)
+            tags_name = left_join((m.name, t.name) for m in Medias if m.id in mids for t in m.tags)
+            for m, t in tags_name:
+                tags_list[m].append(t)
+
+            raw_name = left_join((c.id, rm.name) for c in Conditions if c.reaction == self for rm in c.raw_medias if not rm.media)
+            for i, name in chain(clear_list, raw_name):
+                result[i]['media'][name] = tags_list[name]
+            self.__cached_conditions = list(result.values())
+
+        return self.__cached_conditions
 
     __cached_reaction = None
     __cached_cgr = None
+    __cached_conditions = None
 
 
 class StructureReaction(db.Entity):
@@ -179,13 +225,13 @@ class StructureReaction(db.Entity):
 class Tags(db.Entity):
     id = PrimaryKey(int, auto=True)
     name = Required(str, unique=True)
-    medias = Set('Media')
+    medias = Set('Medias')
 
 
-class Media(db.Entity):
+class Medias(db.Entity):
     id = PrimaryKey(int, auto=True)
     name = Required(str, unique=True)
-    raw_medias = Set('RawMedia')
+    raw_medias = Set('RawMedias')
     tags = Set(Tags)
 
 
@@ -199,11 +245,11 @@ class GroupReaction(db.Entity):
     PrimaryKey(group, reaction)
 
 
-class RawMedia(db.Entity):
+class RawMedias(db.Entity):
     id = PrimaryKey(int, auto=True)
     conditions = Set(Conditions)
     name = Required(str, unique=True)
-    media = Optional(Media)
+    media = Optional(Medias)
 
 
 sql_debug(True)
