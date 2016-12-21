@@ -63,16 +63,30 @@ class Structures(db.Entity):
     reactions = Set('StructureReaction')
 
     def __init__(self, structure, fingerprint=None):
-        structure_string = fear.getreactionhash(structure)
+        structure_string = self.generate_string(structure)
         data = node_link_data(structure)
+
         if fingerprint is None:
-            s = Fragmentor(workpath='.', version=FRAGMENTOR_VERSION, fragment_type=FRAGMENT_TYPE_STR,
-                           min_length=FRAGMENT_MIN_STR, max_length=FRAGMENT_MAX_STR,
-                           useformalcharge=True).get([structure])['X'].loc[0]
-            fingerprint = get_fingerprint(s)
+            fingerprint = self.get_fingerprints([structure])[0]
 
         self.__cached_structure = structure
         super(Structures, self).__init__(data=data, string=structure_string, fingerprint=fingerprint.bytes)
+
+    @staticmethod
+    def generate_string(structure):
+        return fear.getreactionhash(structure)
+
+    @staticmethod
+    def get_fingerprints(structures):
+        f = Fragmentor(workpath='.', version=FRAGMENTOR_VERSION, fragment_type=FRAGMENT_TYPE_STR,
+                       min_length=FRAGMENT_MIN_STR, max_length=FRAGMENT_MAX_STR,
+                       useformalcharge=True).get(structures)['X']
+
+        fingerprints = []
+        for s in f:
+            fingerprints.append(get_fingerprint(s))
+
+        return fingerprints
 
     @property
     def structure(self):
@@ -101,10 +115,7 @@ class Reactions(db.Entity):
         cgr_string, cgr = self.generate_string(reaction, get_cgr=True)
 
         if fingerprint is None:
-            s = Fragmentor(workpath='.', version=FRAGMENTOR_VERSION, fragment_type=FRAGMENT_TYPE_CGR,
-                           min_length=FRAGMENT_MIN_CGR, max_length=FRAGMENT_MAX_CGR,
-                           cgr_dynbonds=FRAGMENT_DYNBOND_CGR, useformalcharge=True).get([cgr])['X'].loc[0]
-            fingerprint = get_fingerprint(s)
+            fingerprint = self.get_fingerprints([cgr], is_cgr=True)[0]
 
         self.__cached_cgr = cgr
         self.__cached_reaction = reaction
@@ -119,6 +130,19 @@ class Reactions(db.Entity):
                                   mapping=next(cgr_reactor.spgraphmatcher(s.structure, x).isomorphisms_iter()))
 
         self.__set_conditions(conditions or [])
+
+    @staticmethod
+    def get_fingerprints(reactions, is_cgr=False):
+        cgrs = reactions if is_cgr else [cgr_core.getCGR(x) for x in reactions]
+        f = Fragmentor(workpath='.', version=FRAGMENTOR_VERSION, fragment_type=FRAGMENT_TYPE_CGR,
+                       min_length=FRAGMENT_MIN_CGR, max_length=FRAGMENT_MAX_CGR,
+                       cgr_dynbonds=FRAGMENT_DYNBOND_CGR, useformalcharge=True).get(cgrs)['X']
+
+        fingerprints = []
+        for s in f:
+            fingerprints.append(get_fingerprint(s))
+
+        return fingerprints
 
     def __set_conditions(self, conditions):
         for c in conditions:
