@@ -29,10 +29,10 @@ cgr_fragmentor = Fragmentor(workpath='.', version=FRAGMENTOR_VERSION, fragment_t
 
 class Conditions(db.Entity):
     id = PrimaryKey(int, auto=True)
-    citation = Optional(LongStr)
+    citation = Optional(LongStr, lazy=False)
     comment = Optional(str)
     conditions = Optional(str)
-    description = Optional(LongStr)
+    description = Optional(LongStr, lazy=False)
     pressure = Optional(str)
     product_yield = Optional(str)
     steps = Optional(str)
@@ -122,10 +122,10 @@ class Reactions(db.Entity):
                 StructureReaction(reaction=self, structure=s, product=is_p,
                                   mapping=next(cgr_reactor.spgraphmatcher(s.structure, x).isomorphisms_iter()))
 
-        self.__set_conditions(conditions)
+        self.__set_conditions(conditions or [])
 
     def __set_conditions(self, conditions):
-        for c in conditions or []:
+        for c in conditions:
             media = c.pop('media')
             cond = Conditions(reaction=self, **c)
             for m in media:
