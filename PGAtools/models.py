@@ -9,7 +9,7 @@ from CGRtools.CGRcore import CGRcore
 from itertools import chain
 from MODtools.descriptors.fragmentor import Fragmentor
 from .fingerprints import get_fingerprint
-from .config import (FP_HEADER_STR, FP_HEADER_CGR, FRAGMENTOR_VERSION, FRAGMENT_TYPE_CGR, FRAGMENT_MIN_CGR,
+from .config import (FRAGMENTOR_VERSION, FRAGMENT_TYPE_CGR, FRAGMENT_MIN_CGR,
                      FRAGMENT_MAX_CGR, FRAGMENT_TYPE_STR, FRAGMENT_MIN_STR, FRAGMENT_MAX_STR, FRAGMENT_DYNBOND_CGR)
 
 
@@ -17,14 +17,6 @@ db = Database()
 fear = FEAR()
 cgr_core = CGRcore()
 cgr_reactor = CGRreactor()
-
-# todo: set config
-str_fragmentor = Fragmentor(workpath='.', version=FRAGMENTOR_VERSION, fragment_type=FRAGMENT_TYPE_STR,
-                            min_length=FRAGMENT_MIN_STR, max_length=FRAGMENT_MAX_STR,
-                            useformalcharge=True, header=open(FP_HEADER_STR))
-cgr_fragmentor = Fragmentor(workpath='.', version=FRAGMENTOR_VERSION, fragment_type=FRAGMENT_TYPE_CGR,
-                            min_length=FRAGMENT_MIN_CGR, max_length=FRAGMENT_MAX_CGR,
-                            cgr_dynbonds=FRAGMENT_DYNBOND_CGR, useformalcharge=True, header=open(FP_HEADER_CGR))
 
 
 class Conditions(db.Entity):
@@ -74,7 +66,9 @@ class Structures(db.Entity):
         structure_string = fear.getreactionhash(structure)
         data = node_link_data(structure)
         if fingerprint is None:
-            s = str_fragmentor.get([structure])['X'].loc[0]
+            s = Fragmentor(workpath='.', version=FRAGMENTOR_VERSION, fragment_type=FRAGMENT_TYPE_STR,
+                           min_length=FRAGMENT_MIN_STR, max_length=FRAGMENT_MAX_STR,
+                           useformalcharge=True).get([structure])['X'].loc[0]
             fingerprint = get_fingerprint(s)
 
         self.__cached_structure = structure
@@ -107,8 +101,10 @@ class Reactions(db.Entity):
         cgr_string, cgr = self.generate_string(reaction, get_cgr=True)
 
         if fingerprint is None:
-            s = cgr_fragmentor.get([cgr])['X'].loc[0]
-            fingerprint = get_fingerprint(s, reaction=True)
+            s = Fragmentor(workpath='.', version=FRAGMENTOR_VERSION, fragment_type=FRAGMENT_TYPE_CGR,
+                           min_length=FRAGMENT_MIN_CGR, max_length=FRAGMENT_MAX_CGR,
+                           cgr_dynbonds=FRAGMENT_DYNBOND_CGR, useformalcharge=True).get([cgr])['X'].loc[0]
+            fingerprint = get_fingerprint(s)
 
         self.__cached_cgr = cgr
         self.__cached_reaction = reaction
