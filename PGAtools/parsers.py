@@ -8,5 +8,5 @@ def populate(subparsers):
     parser.add_argument("--input", "-i", default="input.rdf", type=argparse.FileType('r'),
                         help="RDF inputfile")
     parser.add_argument("--parser", "-p", default='reaxys', choices=['reaxys'], type=str, help="Data Format")
-
+    parser.add_argument("--chunk", "-c", default=100, type=int, help="Chunks size")
     parser.set_defaults(func=populate_core)

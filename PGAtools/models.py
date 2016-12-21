@@ -55,12 +55,12 @@ class Groups(db.Entity):
         return node_link_graph(self.query_remain_data)
 
 
-class Structures(db.Entity):
+class Molecules(db.Entity):
     id = PrimaryKey(int, auto=True)
     data = Required(Json)
     string = Required(str, unique=True)
     fingerprint = Required(bytes)
-    reactions = Set('StructureReaction')
+    reactions = Set('MoleculeReaction')
 
     def __init__(self, structure, fingerprint=None):
         structure_string = self.generate_string(structure)
@@ -70,7 +70,7 @@ class Structures(db.Entity):
             fingerprint = self.get_fingerprints([structure])[0]
 
         self.__cached_structure = structure
-        super(Structures, self).__init__(data=data, string=structure_string, fingerprint=fingerprint.bytes)
+        super(Molecules, self).__init__(data=data, string=structure_string, fingerprint=fingerprint.bytes)
 
     @staticmethod
     def generate_string(structure):
@@ -107,7 +107,7 @@ class Reactions(db.Entity):
     string = Required(str, unique=True)
     fingerprint = Required(bytes)
 
-    structures = Set('StructureReaction')
+    molecules = Set('MoleculeReaction')
     conditions_db = Set(Conditions, cascade_delete=True)
     groups = Set('GroupReaction')
 
@@ -118,15 +118,15 @@ class Reactions(db.Entity):
             fingerprint = self.get_fingerprints([cgr], is_cgr=True)[0]
 
         self.__cached_cgr = cgr
-        self.__cached_reaction = reaction
+        self.__cached_structure = reaction
         super(Reactions, self).__init__(string=cgr_string, fingerprint=fingerprint.bytes,
                                         **{x: y for x, y in db_ids.items() if y})
 
         for i, is_p in (('substrats', False), ('products', True)):
             for x in reaction[i]:
-                s = Structures.get(string=fear.getreactionhash(x)) or Structures(x)
+                s = Molecules.get(string=fear.getreactionhash(x)) or Molecules(x)
 
-                StructureReaction(reaction=self, structure=s, product=is_p,
+                MoleculeReaction(reaction=self, molecule=s, product=is_p,
                                   mapping=next(cgr_reactor.spgraphmatcher(s.structure, x).isomorphisms_iter()))
 
         self.__set_conditions(conditions or [])
@@ -186,15 +186,15 @@ class Reactions(db.Entity):
         return self.__cached_cgr
 
     @property
-    def reaction(self):
-        if self.__cached_reaction is None:
+    def structure(self):
+        if self.__cached_structure is None:
             tmp = dict(substrats=[], products=[], meta={})
 
-            for x in self.structures.order_by(lambda x: x.id):  # potentially optimizable
-                tmp['products' if x.product else 'substrats'].append(relabel_nodes(x.structure.structure, x.mapping,
+            for x in self.molecules.order_by(lambda x: x.id):  # potentially optimizable
+                tmp['products' if x.product else 'substrats'].append(relabel_nodes(x.molecule.structure, x.mapping,
                                                                                    copy=True))
-            self.__cached_reaction = tmp
-        return self.__cached_reaction
+            self.__cached_structure = tmp
+        return self.__cached_structure
 
     @property
     def bitstring_fingerprint(self):
@@ -229,15 +229,15 @@ class Reactions(db.Entity):
 
         return self.__cached_conditions
 
-    __cached_reaction = None
+    __cached_structure = None
     __cached_cgr = None
     __cached_conditions = None
 
 
-class StructureReaction(db.Entity):
+class MoleculeReaction(db.Entity):
     id = PrimaryKey(int, auto=True)
     reaction = Required(Reactions)
-    structure = Required(Structures)
+    molecule = Required(Molecules)
     product = Required(bool, default=False)
     mapping = Required(Json)
 
