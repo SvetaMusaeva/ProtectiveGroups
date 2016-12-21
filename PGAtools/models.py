@@ -146,7 +146,7 @@ class Reactions(db.Entity):
 
     def __set_conditions(self, conditions):
         for c in conditions:
-            media = c.pop('media')
+            media = c.pop('media', [])
             cond = Conditions(reaction=self, **c)
             for m in media:
                 cond.raw_medias.add(RawMedias.get(name=m) or RawMedias(name=m))
@@ -165,7 +165,7 @@ class Reactions(db.Entity):
             for ac in available_conditions:
                 if all((ac[key] or None) == (c.get(key) or None)
                        for key in ('product_yield', 'temperature', 'time', 'citation', 'comment','conditions',
-                                   'description', 'pressure', 'steps')) and ac['media'] == set(c['media']):
+                                   'description', 'pressure', 'steps')) and ac['media'] == set(c.get('media', [])):
                     flag = True
                     break
             if not flag:
@@ -182,7 +182,7 @@ class Reactions(db.Entity):
     @property
     def cgr(self):
         if self.__cached_cgr is None:
-            self.__cached_cgr = cgr_core.getCGR(self.reaction)
+            self.__cached_cgr = cgr_core.getCGR(self.structure)
         return self.__cached_cgr
 
     @property
@@ -191,8 +191,8 @@ class Reactions(db.Entity):
             tmp = dict(substrats=[], products=[], meta={})
 
             for x in self.molecules.order_by(lambda x: x.id):  # potentially optimizable
-                tmp['products' if x.product else 'substrats'].append(relabel_nodes(x.molecule.structure, x.mapping,
-                                                                                   copy=True))
+                tmp['products' if x.product else 'substrats'].append(
+                    relabel_nodes(x.molecule.structure, {int(k): int(v) for k, v in x.mapping.items()}))
             self.__cached_structure = tmp
         return self.__cached_structure
 

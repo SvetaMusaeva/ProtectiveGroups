@@ -16,11 +16,17 @@ def populate_core(**kwargs):
     for nums, chunk in enumerate(zip_longest(*[inputdata.read()] * kwargs['chunk']), start=1):
         print("chunk: %d" % nums, file=sys.stderr)
 
-        if None in chunk:
-            chunk = [x for x in chunk if x is not None]
+        cleaned = []
+        for r in chunk:
+            try:
+                if r is not None:
+                    rs = Reactions.generate_string(r)
+                    cleaned.append((r, rs))
+            except:
+                pass
 
         molecules = []
-        for x in chunk:
+        for x, _ in cleaned:
             for i in ('substrats', 'products'):
                 molecules.extend(x[i])
 
@@ -29,8 +35,8 @@ def populate_core(**kwargs):
                 if not Molecules.exists(string=Molecules.generate_string(mol)):
                     Molecules(mol, fingerprint=m_fp)
 
-            for r, r_fp in zip(chunk, Reactions.get_fingerprints(chunk)):
-                reaction = Reactions.get(string=Reactions.generate_string(r))
+            for (r, rs), r_fp in zip(cleaned, Reactions.get_fingerprints(x for x, _ in cleaned)):
+                reaction = Reactions.get(string=rs)
                 meta = data_parser.parse(r['meta'])
                 if not reaction:
                     Reactions(r, conditions=meta['rxd'], rx_id=meta['rx_id'], fingerprint=r_fp)
