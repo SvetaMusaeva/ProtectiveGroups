@@ -83,7 +83,7 @@ class Structures(db.Entity):
                        useformalcharge=True).get(structures)['X']
 
         fingerprints = []
-        for s in f:
+        for _, s in f.iterrows():
             fingerprints.append(get_fingerprint(s))
 
         return fingerprints
@@ -139,7 +139,7 @@ class Reactions(db.Entity):
                        cgr_dynbonds=FRAGMENT_DYNBOND_CGR, useformalcharge=True).get(cgrs)['X']
 
         fingerprints = []
-        for s in f:
+        for _, s in f.iterrows():
             fingerprints.append(get_fingerprint(s))
 
         return fingerprints
