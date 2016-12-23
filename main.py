@@ -2,7 +2,7 @@ import argparse
 import importlib
 from importlib.util import find_spec
 from PGAtools.version import version
-from PGAtools.parsers import populate
+from PGAtools.parsers import populate, tag_processing
 
 
 def parse_args():
@@ -11,6 +11,7 @@ def parse_args():
     subparsers = parser.add_subparsers(title='subcommands', description='available utilities')
 
     populate(subparsers)
+    tag_processing(subparsers)
 
     if find_spec('argcomplete'):
         argcomplete = importlib.import_module('argcomplete')

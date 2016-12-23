@@ -213,7 +213,8 @@ class Reactions(db.Entity):
 
             clear_list = []
             mids = set()
-            clear_name = left_join((c.id, m.name, m.id) for c in Conditions if c.reaction == self for rm in c.raw_medias if rm.media for m in rm.media)
+            clear_name = left_join((c.id, m.name, m.id) for c in Conditions if c.reaction == self
+                                   for rm in c.raw_medias if rm.media for m in rm.media)
             for *id_name, mid in clear_name:
                 mids.add(mid)
                 clear_list.append(id_name)
@@ -223,7 +224,8 @@ class Reactions(db.Entity):
             for m, t in tags_name:
                 tags_list[m].append(t)
 
-            raw_name = left_join((c.id, rm.name) for c in Conditions if c.reaction == self for rm in c.raw_medias if not rm.media)
+            raw_name = left_join((c.id, rm.name) for c in Conditions if c.reaction == self
+                                 for rm in c.raw_medias if not rm.media)
             for i, name in chain(clear_list, raw_name):
                 result[i]['media'][name] = tags_list[name]
             self.__cached_conditions = list(result.values())
@@ -255,6 +257,17 @@ class Medias(db.Entity):
     raw_medias = Set('RawMedias')
     tags = Set(Tags)
 
+    @property
+    def tag_names(self):
+        return [x.name for x in self.tags]
+
+    def update_tags(self, tags):
+        ns= set(tags)
+        os = set(self.tag_names)
+
+        self.tags.remove(x for x in self.tags if x.name in os.difference(ns))
+        self.tags.add(Tags.get(name=x) or Tags(name=x) for x in ns.difference(os))
+
 
 class GroupReaction(db.Entity):
     group = Required(Groups)
@@ -271,6 +284,9 @@ class RawMedias(db.Entity):
     conditions = Set(Conditions)
     name = Required(str, unique=True)
     media = Optional(Medias)
+
+    def update_media(self, name):
+        self.media = Medias.get(name=name) or Medias(name=name)
 
 
 sql_debug(True)
