@@ -172,6 +172,7 @@ class Reactions(db.Entity):
                 to_add.append(c)
 
         self.__set_conditions(to_add)
+        return len(to_add)
 
     @staticmethod
     def generate_string(reaction, get_cgr=False):
@@ -192,7 +193,7 @@ class Reactions(db.Entity):
 
             for x in self.molecules.order_by(lambda x: x.id):  # potentially optimizable
                 tmp['products' if x.product else 'substrats'].append(
-                    relabel_nodes(x.molecule.structure, {int(k): int(v) for k, v in x.mapping.items()}))
+                    relabel_nodes(x.molecule.structure, {int(k): v for k, v in x.mapping.items()}))
             self.__cached_structure = tmp
         return self.__cached_structure
 
