@@ -15,6 +15,7 @@ class Parser(object):
         cleaned = dict(rx_id=int(meta['ROOT:RX_ID']))
 
         for meta_key, meta_value in meta.items():
+            meta_value = meta_value.replace("+\n", "")
             *presection, section = meta_key.split(':')
             if presection and section in self.__fields and presection[-1].startswith('RXD('):
                 if section in ('CAT', 'SOL', 'RGT'):
