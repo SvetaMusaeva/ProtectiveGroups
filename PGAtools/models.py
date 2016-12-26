@@ -37,22 +37,22 @@ class Conditions(db.Entity):
 class Groups(db.Entity):
     id = PrimaryKey(int, auto=True)
     name = Required(str)
-    query_leave_data = Required(Json)
-    query_remain_data = Required(Json)
+    transform_data = Required(Json)
+    group_data = Required(Json)
     reactions = Set('GroupReaction')
 
-    def __init__(self, name, query_leave, query_remain):
-        query_leave_data = node_link_data(query_leave)
-        query_remain_data = node_link_data(query_remain)
-        super(Groups, self).__init__(name=name, query_leave_data=query_leave_data, query_remain_data=query_remain_data)
+    def __init__(self, name, group, transform):
+        transform_data = node_link_data(transform)
+        group_data = node_link_data(group)
+        super(Groups, self).__init__(name=name, query_leave_data=transform_data, query_remain_data=group_data)
 
     @property
-    def query_leave(self):
-        return node_link_graph(self.query_leave_data)
+    def group(self):
+        return node_link_graph(self.group_data)
 
     @property
-    def query_remain(self):
-        return node_link_graph(self.query_remain_data)
+    def transform(self):
+        return node_link_graph(self.transform_data)
 
 
 class Molecules(db.Entity):
@@ -130,6 +130,11 @@ class Reactions(db.Entity):
                                   mapping=next(cgr_reactor.spgraphmatcher(s.structure, x).isomorphisms_iter()))
 
         self.__set_conditions(conditions or [])
+
+    def analyse_groups(self, groups=None):
+        if groups is None:
+            groups = list(x for x in Groups)
+
 
     @staticmethod
     def get_fingerprints(reactions, is_cgr=False):

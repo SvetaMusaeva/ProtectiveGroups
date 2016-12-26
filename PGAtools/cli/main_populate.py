@@ -3,7 +3,7 @@ from itertools import zip_longest, count
 from pony.orm import db_session
 from CGRtools.files.RDFrw import RDFread
 from ..utils.reaxys_data import Parser as ReaxysParser
-from ..models import Reactions, Molecules
+from ..models import Reactions, Molecules, Groups
 
 
 parsers = dict(reaxys=ReaxysParser)
@@ -17,6 +17,10 @@ def populate_core(**kwargs):
     clean_data = count()
     added_data = count()
     upd_data = count()
+
+    with db_session:
+        groups = list(x for x in Groups)
+
     for nums, chunk in enumerate(zip_longest(*[inputdata.read()] * kwargs['chunk']), start=1):
         print("chunk: %d" % nums, file=sys.stderr)
 
@@ -46,7 +50,8 @@ def populate_core(**kwargs):
                 meta = data_parser.parse(r['meta'])
                 if not reaction:
                     next(added_data)
-                    Reactions(r, conditions=meta['rxd'], rx_id=meta['rx_id'], fingerprint=r_fp)
+                    reaction = Reactions(r, conditions=meta['rxd'], rx_id=meta['rx_id'], fingerprint=r_fp)
+                    reaction.analyse_groups(groups=groups)
                 else:
                     if reaction.set_conditions(meta['rxd']):
                         next(upd_data)
