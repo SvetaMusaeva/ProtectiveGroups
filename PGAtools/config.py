@@ -11,11 +11,17 @@ FRAGMENT_TYPE_CGR = 3
 FRAGMENT_MIN_CGR = 2
 FRAGMENT_MAX_CGR = 10
 FRAGMENT_DYNBOND_CGR = 1
+DEBUG = False
+CREATE_TABLES = False
+DB_PASS = None
+DB_HOST = None
+DB_NAME = None
+DB_USER = None
 
 
-
-params = ('FP_SIZE','FP_ACTIVE_BITS', 'FRAGMENTOR_VERSION','FRAGMENT_TYPE_STR', 'FRAGMENT_MIN_STR',
-          'FRAGMENT_MAX_STR', 'FRAGMENT_TYPE_CGR', 'FRAGMENT_MIN_CGR', 'FRAGMENT_MAX_CGR', 'FRAGMENT_DYNBOND_CGR')
+params = ('FP_SIZE', 'FP_ACTIVE_BITS', 'FRAGMENTOR_VERSION', 'FRAGMENT_TYPE_STR', 'FRAGMENT_MIN_STR', 'CREATE_TABLES',
+          'FRAGMENT_MAX_STR', 'FRAGMENT_TYPE_CGR', 'FRAGMENT_MIN_CGR', 'FRAGMENT_MAX_CGR', 'FRAGMENT_DYNBOND_CGR',
+          'DB_USER', 'DB_PASS', 'DB_HOST', 'DB_NAME')
 
 if not path.exists(path.join(path.dirname(__file__), "config.ini")):
     with open(path.join(path.dirname(__file__), "config.ini"), 'w') as f:

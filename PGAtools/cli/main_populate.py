@@ -21,7 +21,7 @@ def populate_core(**kwargs):
     with db_session:
         groups = list(x for x in Groups)
 
-    for nums, chunk in enumerate(zip_longest(*[inputdata.read()] * kwargs['chunk']), start=1):
+    for nums, chunk in enumerate(zip_longest(*[inputdata] * kwargs['chunk']), start=1):
         print("chunk: %d" % nums, file=sys.stderr)
 
         cleaned = []
@@ -29,28 +29,36 @@ def populate_core(**kwargs):
             if r is not None:
                 next(raw_data)
                 try:
-                    rs = Reactions.generate_string(r)
-                    cleaned.append((r, rs))
+                    rs, cgr = Reactions.get_fear(r, get_cgr=True)
+                    cleaned.append((r, rs, cgr))
                 except:
                     pass
 
+        rfps = Reactions.get_fingerprints([x for *_, x in cleaned], is_cgr=True)
+
         molecules = []
-        for x, _ in cleaned:
-            next(clean_data)
-            for i in ('substrats', 'products'):
-                molecules.extend(x[i])
+        with db_session:
+            for r, _ in cleaned:
+                next(clean_data)
+                for i in ('substrats', 'products'):
+                    for m in r[i]:
+                        ms = Molecules.get_fear(m)
+                        if not Molecules.exists(string=ms):
+                            molecules.append((m, ms))
+
+        mfps = Molecules.get_fingerprints([m for m, _ in molecules])
 
         with db_session:
-            for mol, m_fp in zip(molecules, Molecules.get_fingerprints(molecules)):
-                if not Molecules.exists(string=Molecules.generate_string(mol)):
-                    Molecules(mol, fingerprint=m_fp)
+            for (m, ms), mf in zip(molecules, mfps):
+                Molecules(m, fingerprint=mf, fear_string=ms)
 
-            for (r, rs), r_fp in zip(cleaned, Reactions.get_fingerprints(x for x, _ in cleaned)):
+            for (r, rs, cgr), r_fp in zip(cleaned, rfps):
                 reaction = Reactions.get(string=rs)
                 meta = data_parser.parse(r['meta'])
                 if not reaction:
                     next(added_data)
-                    reaction = Reactions(r, conditions=meta['rxd'], rx_id=meta['rx_id'], fingerprint=r_fp)
+                    reaction = Reactions(r, conditions=meta['rxd'], rx_id=meta['rx_id'], fingerprint=r_fp,
+                                         fear_string=rs, cgr=cgr)
                     reaction.analyse_groups(groups=groups)
                 else:
                     if reaction.set_conditions(meta['rxd']):

@@ -1,4 +1,4 @@
-from pony.orm import *
+from pony.orm import Database, PrimaryKey, Optional, Required, LongStr, Set, Json, left_join, sql_debug
 from collections import defaultdict
 from networkx import relabel_nodes
 from bitstring import BitArray
@@ -6,15 +6,17 @@ from networkx.readwrite.json_graph import node_link_graph, node_link_data
 from CGRtools.FEAR import FEAR
 from CGRtools.CGRreactor import CGRreactor
 from CGRtools.CGRcore import CGRcore
+from CGRtools.files import MoleculeContainer, ReactionContainer
 from itertools import chain
 from MODtools.descriptors.fragmentor import Fragmentor
 from .fingerprints import get_fingerprint
-from .config import (FRAGMENTOR_VERSION, FRAGMENT_TYPE_CGR, FRAGMENT_MIN_CGR,
-                     FRAGMENT_MAX_CGR, FRAGMENT_TYPE_STR, FRAGMENT_MIN_STR, FRAGMENT_MAX_STR, FRAGMENT_DYNBOND_CGR)
+from .config import (FP_SIZE, FRAGMENTOR_VERSION, FRAGMENT_TYPE_CGR, FRAGMENT_MIN_CGR, CREATE_TABLES,
+                     FRAGMENT_MAX_CGR, FRAGMENT_TYPE_STR, FRAGMENT_MIN_STR, FRAGMENT_MAX_STR, FRAGMENT_DYNBOND_CGR,
+                     DB_USER, DB_PASS, DB_HOST, DB_NAME, DEBUG)
 
 
 db = Database()
-fear = FEAR()
+fear = FEAR(isotop=True)
 cgr_core = CGRcore()
 cgr_reactor = CGRreactor()
 
@@ -58,23 +60,25 @@ class Groups(db.Entity):
 class Molecules(db.Entity):
     id = PrimaryKey(int, auto=True)
     data = Required(Json)
-    string = Required(str, unique=True)
-    fingerprint = Required(bytes)
+    fear = Required(str, unique=True)
+    fingerprint = Required(str, sql_type='bit(%s)' % (2 ** FP_SIZE))
     reactions = Set('MoleculeReaction')
 
-    def __init__(self, structure, fingerprint=None):
-        structure_string = self.generate_string(structure)
-        data = node_link_data(structure)
+    def __init__(self, molecule, fingerprint=None, fear_string=None):
+        data = node_link_data(molecule)
 
+        if fear_string is None:
+            fear_string = self.get_fear(molecule)
         if fingerprint is None:
-            fingerprint = self.get_fingerprints([structure])[0]
+            fingerprint = self.get_fingerprints([molecule])[0]
 
-        self.__cached_structure = structure
-        super(Molecules, self).__init__(data=data, string=structure_string, fingerprint=fingerprint.bytes)
+        self.__cached_structure = molecule
+        self.__cached_bitstring = fingerprint
+        super(Molecules, self).__init__(data=data, fear=fear_string, fingerprint=fingerprint.bin)
 
     @staticmethod
-    def generate_string(structure):
-        return fear.getreactionhash(structure)
+    def get_fear(molecule):
+        return fear.get_cgr_string(molecule)
 
     @staticmethod
     def get_fingerprints(structures):
@@ -82,59 +86,65 @@ class Molecules(db.Entity):
                        min_length=FRAGMENT_MIN_STR, max_length=FRAGMENT_MAX_STR,
                        useformalcharge=True).get(structures)['X']
 
-        fingerprints = []
-        for _, s in f.iterrows():
-            fingerprints.append(get_fingerprint(s))
-
-        return fingerprints
+        return [get_fingerprint(s) for _, s in f.iterrows()]
 
     @property
     def structure(self):
         if self.__cached_structure is None:
-            self.__cached_structure = node_link_graph(self.data)
+            g = node_link_graph(self.data)
+            g.__class__ = MoleculeContainer
+            self.__cached_structure = g
         return self.__cached_structure
 
     @property
     def bitstring_fingerprint(self):
-        return BitArray(self.fingerprint)
+        if self.__cached_bitstring is None:
+            self.__cached_bitstring = BitArray(bin=self.fingerprint)
+        return self.__cached_bitstring
 
     __cached_structure = None
+    __cached_bitstring = None
 
 
 class Reactions(db.Entity):
     id = PrimaryKey(int, auto=True)
     rx_id = Optional(int)
-    string = Required(str, unique=True)
-    fingerprint = Required(bytes)
+    fear = Required(str, unique=True)
+    fingerprint = Required(str, sql_type='bit(%s)' % (2 ** FP_SIZE))
 
     molecules = Set('MoleculeReaction')
-    conditions_db = Set(Conditions, cascade_delete=True)
+    conditions = Set(Conditions, cascade_delete=True)
     groups = Set('GroupReaction')
 
-    def __init__(self, reaction, conditions=None, fingerprint=None, **db_ids):
-        cgr_string, cgr = self.generate_string(reaction, get_cgr=True)
+    def __init__(self, reaction, conditions=None, fingerprint=None, fear_string=None, cgr=None,
+                 substrats_fears=None, products_fears=None, **db_ids):
+        if fear_string is None:
+            fear_string, cgr = self.get_fear(reaction, get_cgr=True)
+        elif cgr is None:
+            cgr = cgr_core.getCGR(reaction)
 
         if fingerprint is None:
             fingerprint = self.get_fingerprints([cgr], is_cgr=True)[0]
 
         self.__cached_cgr = cgr
         self.__cached_structure = reaction
-        super(Reactions, self).__init__(string=cgr_string, fingerprint=fingerprint.bytes,
+        self.__cached_bitstring = fingerprint
+        super(Reactions, self).__init__(fear=fear_string, fingerprint=fingerprint.bytes,
                                         **{x: y for x, y in db_ids.items() if y})
 
+        fears = dict(substrats=iter(substrats_fears or []), products=iter(products_fears or []))
         for i, is_p in (('substrats', False), ('products', True)):
             for x in reaction[i]:
-                s = Molecules.get(string=fear.getreactionhash(x)) or Molecules(x)
+                m = Molecules.get(fear=next(fears[i], fear.get_cgr_string(x))) or Molecules(x)
+                mapping = list(next(cgr_reactor.get_cgr_matcher(m.structure, x).isomorphisms_iter()).items())
+                MoleculeReaction(reaction=self, molecule=m, product=is_p, mapping=mapping)
 
-                MoleculeReaction(reaction=self, molecule=s, product=is_p,
-                                  mapping=next(cgr_reactor.spgraphmatcher(s.structure, x).isomorphisms_iter()))
-
-        self.__set_conditions(conditions or [])
+        if conditions:
+            self.__set_conditions(conditions)
 
     def analyse_groups(self, groups=None):
         if groups is None:
             groups = list(x for x in Groups)
-
 
     @staticmethod
     def get_fingerprints(reactions, is_cgr=False):
@@ -143,11 +153,7 @@ class Reactions(db.Entity):
                        min_length=FRAGMENT_MIN_CGR, max_length=FRAGMENT_MAX_CGR,
                        cgr_dynbonds=FRAGMENT_DYNBOND_CGR, useformalcharge=True).get(cgrs)['X']
 
-        fingerprints = []
-        for _, s in f.iterrows():
-            fingerprints.append(get_fingerprint(s))
-
-        return fingerprints
+        return [get_fingerprint(s) for _, s in f.iterrows()]
 
     def __set_conditions(self, conditions):
         for c in conditions:
@@ -157,32 +163,27 @@ class Reactions(db.Entity):
                 cond.raw_medias.add(RawMedias.get(name=m) or RawMedias(name=m))
 
     def set_conditions(self, conditions):
-        available_conditions = {x.id: x.to_dict(exclude='id') for x in self.conditions_db}
+        tmp = {c.id: c.to_dict(exclude='id') for c in self.conditions}
         raw_name = left_join((c.id, rm.name) for c in Conditions if c.reaction == self for rm in c.raw_medias)
         for i, name in raw_name:
-            available_conditions[i].setdefault('media', set()).add(name)
+            tmp[i].setdefault('media', set()).add(name)
 
-        available_conditions = list(available_conditions.values())
-
+        available_conditions = list(tmp.values())
         to_add = []
+        keys = ('product_yield', 'temperature', 'time', 'citation', 'comment',
+                'conditions', 'description', 'pressure', 'steps')
         for c in conditions:
-            flag = False
-            for ac in available_conditions:
-                if all((ac[key] or None) == (c.get(key) or None)
-                       for key in ('product_yield', 'temperature', 'time', 'citation', 'comment','conditions',
-                                   'description', 'pressure', 'steps')) and ac['media'] == set(c.get('media', [])):
-                    flag = True
-                    break
-            if not flag:
+            if not any(all((ac[key] or None) == (c.get(key) or None) for key in keys)
+                       and ac['media'] == set(c.get('media', [])) for ac in available_conditions):
                 to_add.append(c)
 
         self.__set_conditions(to_add)
         return len(to_add)
 
     @staticmethod
-    def generate_string(reaction, get_cgr=False):
+    def get_fear(reaction, get_cgr=False):
         cgr = cgr_core.getCGR(reaction)
-        cgr_string = fear.getreactionhash(cgr)
+        cgr_string = fear.get_cgr_string(cgr)
         return (cgr_string, cgr) if get_cgr else cgr_string
 
     @property
@@ -194,24 +195,23 @@ class Reactions(db.Entity):
     @property
     def structure(self):
         if self.__cached_structure is None:
-            tmp = dict(substrats=[], products=[], meta={})
-
-            for x in self.molecules.order_by(lambda x: x.id):  # potentially optimizable
-                tmp['products' if x.product else 'substrats'].append(
-                    relabel_nodes(x.molecule.structure, {int(k): v for k, v in x.mapping.items()}))
-            self.__cached_structure = tmp
+            r = ReactionContainer()
+            for m in self.molecules.order_by(lambda x: x.id):
+                r['products' if m.product else 'substrats'].append(relabel_nodes(m.molecule.structure, dict(m.mapping)))
+            self.__cached_structure = r
         return self.__cached_structure
 
     @property
     def bitstring_fingerprint(self):
-        return BitArray(self.fingerprint)
+        if self.__cached_bitstring is None:
+            self.__cached_bitstring = BitArray(bin=self.fingerprint)
+        return self.__cached_bitstring
 
-    @property
-    def conditions(self):
+    def get_conditions(self):
         if self.__cached_conditions is None:
             result = {}
 
-            for condition in self.conditions_db:
+            for condition in self.conditions:
                 data = condition.to_dict(exclude='id')
                 data['media'] = {}
                 result[condition.id] = data
@@ -240,6 +240,7 @@ class Reactions(db.Entity):
     __cached_structure = None
     __cached_cgr = None
     __cached_conditions = None
+    __cached_bitstring = None
 
 
 class MoleculeReaction(db.Entity):
@@ -267,7 +268,7 @@ class Medias(db.Entity):
         return [x.name for x in self.tags]
 
     def update_tags(self, tags):
-        ns= set(tags)
+        ns = set(tags)
         os = set(self.tag_names)
 
         self.tags.remove(x for x in self.tags if x.name in os.difference(ns))
@@ -294,6 +295,6 @@ class RawMedias(db.Entity):
         self.media = Medias.get(name=name) or Medias(name=name)
 
 
-sql_debug(True)
-db.bind("sqlite", "database.sqlite")
-db.generate_mapping(create_tables=True)
+sql_debug(DEBUG)
+db.bind('postgres', user=DB_USER, password=DB_PASS, host=DB_HOST, database=DB_NAME)
+db.generate_mapping(create_tables=CREATE_TABLES)
