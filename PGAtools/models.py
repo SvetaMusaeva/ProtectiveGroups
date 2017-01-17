@@ -1,3 +1,4 @@
+from functools import reduce
 from pony.orm import Database, PrimaryKey, Optional, Required, LongStr, Set, Json, left_join, sql_debug
 from collections import defaultdict
 from networkx import relabel_nodes
@@ -101,6 +102,10 @@ class Molecules(db.Entity):
         if self.__cached_bitstring is None:
             self.__cached_bitstring = BitArray(bin=self.fingerprint)
         return self.__cached_bitstring
+
+    @staticmethod
+    def get_molecule(molecule):
+        return Molecules.get(fear=fear.get_cgr_string(molecule))
 
     __cached_structure = None
     __cached_bitstring = None
@@ -236,6 +241,44 @@ class Reactions(db.Entity):
             self.__cached_conditions = list(result.values())
 
         return self.__cached_conditions
+
+    @staticmethod
+    def get_reaction(reaction):
+        cgr = cgr_core.getCGR(reaction)
+        return Reactions.get(fear=fear.get_cgr_string(cgr))
+
+    @staticmethod
+    def get_reactions_with_molecule(molecule, product=None):
+        if product is None:
+            q = left_join(r for m in Molecules if m.fear == fear.get_cgr_string(molecule) for rs in m.reactions
+                          for r in rs.reactions)
+        else:
+            q = left_join(r for m in Molecules if m.fear == fear.get_cgr_string(molecule) for rs in m.reactions if
+                          rs.product == product for r in rs.reactions)
+        return list(q)
+
+    @staticmethod
+    def get_reactions_with_components(products=None, substrats=None):
+        collector = {}
+        if products is not None:
+            p_fear = [fear.get_cgr_string(x) for x in products]
+            for x in p_fear:
+                collector[x] = set()
+
+            for m, r in left_join((m.fear, r) for m in Molecules if m.fear in p_fear
+                                  for rs in m.reactions if rs.product for r in rs.reactions):
+                collector[m].add(r)
+
+        if substrats is not None:
+            s_fear = [fear.get_cgr_string(x) for x in substrats]
+            for x in s_fear:
+                collector[fear.get_cgr_string(x)] = set()
+
+            for m, r in left_join((m.fear, r) for m in Molecules if m.fear in s_fear
+                                  for rs in m.reactions if not rs.product for r in rs.reactions):
+                collector[m].add(r)
+
+        return list(reduce(set.intersection, collector.values()))
 
     __cached_structure = None
     __cached_cgr = None
