@@ -216,7 +216,8 @@ class Reactions(db.Entity):
         if self.__cached_structure is None:
             r = ReactionContainer()
             for m in self.molecules.order_by(lambda x: x.id):
-                r['products' if m.product else 'substrats'].append(relabel_nodes(m.molecule.structure, dict(m.mapping)))
+                r['products' if m.product else 'substrats'].append(
+                    relabel_nodes(m.molecule.structure, dict(m.mapping)) if m.mapping else m.molecule.structure)
             self.__cached_structure = r
         return self.__cached_structure
 
