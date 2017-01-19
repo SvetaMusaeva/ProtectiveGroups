@@ -10,7 +10,7 @@ from CGRtools.CGRcore import CGRcore
 from CGRtools.files import MoleculeContainer, ReactionContainer
 from itertools import chain
 from MODtools.descriptors.fragmentor import Fragmentor
-from .fingerprints import get_fingerprint
+from .fingerprints import get_fingerprints
 from .config import (FP_SIZE, FRAGMENTOR_VERSION, FRAGMENT_TYPE_CGR, FRAGMENT_MIN_CGR, CREATE_TABLES,
                      FRAGMENT_MAX_CGR, FRAGMENT_TYPE_STR, FRAGMENT_MIN_STR, FRAGMENT_MAX_STR, FRAGMENT_DYNBOND_CGR,
                      DB_USER, DB_PASS, DB_HOST, DB_NAME, DEBUG)
@@ -62,7 +62,7 @@ class Molecules(db.Entity):
     id = PrimaryKey(int, auto=True)
     data = Required(Json)
     fear = Required(str, unique=True)
-    fingerprint = Required(str, sql_type='bit(%s)' % (2 ** FP_SIZE))
+    fingerprint = Required(str)  # , sql_type='bit(%s)' % (2 ** FP_SIZE))
     reactions = Set('MoleculeReaction')
 
     def __init__(self, molecule, fingerprint=None, fear_string=None):
@@ -87,7 +87,7 @@ class Molecules(db.Entity):
                        min_length=FRAGMENT_MIN_STR, max_length=FRAGMENT_MAX_STR,
                        useformalcharge=True).get(structures)['X']
 
-        return [get_fingerprint(s) for _, s in f.iterrows()]
+        return get_fingerprints(f)
 
     @property
     def structure(self):
@@ -115,7 +115,7 @@ class Reactions(db.Entity):
     id = PrimaryKey(int, auto=True)
     rx_id = Optional(int)
     fear = Required(str, unique=True)
-    fingerprint = Required(str, sql_type='bit(%s)' % (2 ** FP_SIZE))
+    fingerprint = Required(str)  # , sql_type='bit(%s)' % (2 ** FP_SIZE))
 
     molecules = Set('MoleculeReaction')
     conditions = Set(Conditions, cascade_delete=True)
@@ -134,15 +134,29 @@ class Reactions(db.Entity):
         self.__cached_cgr = cgr
         self.__cached_structure = reaction
         self.__cached_bitstring = fingerprint
-        super(Reactions, self).__init__(fear=fear_string, fingerprint=fingerprint.bytes,
+        super(Reactions, self).__init__(fear=fear_string, fingerprint=fingerprint.bin,
                                         **{x: y for x, y in db_ids.items() if y})
 
+        new_mols = []
+        batch = []
         fears = dict(substrats=iter(substrats_fears or []), products=iter(products_fears or []))
         for i, is_p in (('substrats', False), ('products', True)):
             for x in reaction[i]:
-                m = Molecules.get(fear=next(fears[i], fear.get_cgr_string(x))) or Molecules(x)
-                mapping = list(next(cgr_reactor.get_cgr_matcher(m.structure, x).isomorphisms_iter()).items())
-                MoleculeReaction(reaction=self, molecule=m, product=is_p, mapping=mapping)
+                m_fear_string = next(fears[i], fear.get_cgr_string(x))
+                m = Molecules.get(fear=m_fear_string)
+                if m:
+                    mapping = list(next(cgr_reactor.get_cgr_matcher(m.structure, x).isomorphisms_iter()).items())
+                    batch.append((m, is_p, mapping))
+                else:
+                    new_mols.append((x, is_p, m_fear_string))
+
+        if new_mols:
+            for fp, (x, is_p, m_fear_string) in zip(Molecules.get_fingerprints([x for x, *_ in new_mols]), new_mols):
+                m = Molecules(x, fear_string=m_fear_string, fingerprint=fp)
+                batch.append((m, is_p, None))
+
+        for m, is_p, mapping in batch:
+            MoleculeReaction(reaction=self, molecule=m, product=is_p, mapping=mapping)
 
         if conditions:
             self.__set_conditions(conditions)
@@ -158,7 +172,7 @@ class Reactions(db.Entity):
                        min_length=FRAGMENT_MIN_CGR, max_length=FRAGMENT_MAX_CGR,
                        cgr_dynbonds=FRAGMENT_DYNBOND_CGR, useformalcharge=True).get(cgrs)['X']
 
-        return [get_fingerprint(s) for _, s in f.iterrows()]
+        return get_fingerprints(f)
 
     def __set_conditions(self, conditions):
         for c in conditions:
@@ -318,16 +332,6 @@ class Medias(db.Entity):
         self.tags.add(Tags.get(name=x) or Tags(name=x) for x in ns.difference(os))
 
 
-class GroupReaction(db.Entity):
-    group = Required(Groups)
-    reaction = Required(Reactions)
-    cleavage = Required(bool, default=False)
-    remain = Required(bool, default=False)
-    transform = Required(bool, default=False)
-    fingerprint = Optional(bytes)
-    PrimaryKey(group, reaction)
-
-
 class RawMedias(db.Entity):
     id = PrimaryKey(int, auto=True)
     conditions = Set(Conditions)
@@ -338,6 +342,16 @@ class RawMedias(db.Entity):
         self.media = Medias.get(name=name) or Medias(name=name)
 
 
+class GroupReaction(db.Entity):
+    group = Required(Groups)
+    reaction = Required(Reactions)
+    cleavage = Required(bool, default=False)
+    remain = Required(bool, default=False)
+    transform = Required(bool, default=False)
+    fingerprint = Optional(str)  # , sql_type='bit(%s)' % (2 ** FP_SIZE))
+    PrimaryKey(group, reaction)
+
+
 sql_debug(DEBUG)
-db.bind('postgres', user=DB_USER, password=DB_PASS, host=DB_HOST, database=DB_NAME)
+db.bind("sqlite", "database.sqlite")  # 'postgres', user=DB_USER, password=DB_PASS, host=DB_HOST, database=DB_NAME)
 db.generate_mapping(create_tables=CREATE_TABLES)

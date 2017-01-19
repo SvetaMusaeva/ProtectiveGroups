@@ -37,14 +37,18 @@ def populate_core(**kwargs):
         rfps = Reactions.get_fingerprints([x for *_, x in cleaned], is_cgr=True)
 
         molecules = []
+        lrms = []
         with db_session:
             for r, _ in cleaned:
                 next(clean_data)
+                rms = dict(substrats=[], products=[])
                 for i in ('substrats', 'products'):
                     for m in r[i]:
                         ms = Molecules.get_fear(m)
+                        rms[i].append(ms)
                         if not Molecules.exists(string=ms):
                             molecules.append((m, ms))
+                lrms.append(rms)
 
         mfps = Molecules.get_fingerprints([m for m, _ in molecules])
 
@@ -52,13 +56,14 @@ def populate_core(**kwargs):
             for (m, ms), mf in zip(molecules, mfps):
                 Molecules(m, fingerprint=mf, fear_string=ms)
 
-            for (r, rs, cgr), r_fp in zip(cleaned, rfps):
+            for (r, rs, cgr), r_fp, rms in zip(cleaned, rfps, lrms):
                 reaction = Reactions.get(string=rs)
                 meta = data_parser.parse(r['meta'])
                 if not reaction:
                     next(added_data)
                     reaction = Reactions(r, conditions=meta['rxd'], rx_id=meta['rx_id'], fingerprint=r_fp,
-                                         fear_string=rs, cgr=cgr)
+                                         fear_string=rs, cgr=cgr,
+                                         substrats_fears=rms['substrats'], products_fears=rms['products'])
                     reaction.analyse_groups(groups=groups)
                 else:
                     if reaction.set_conditions(meta['rxd']):
