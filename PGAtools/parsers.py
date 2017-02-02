@@ -26,6 +26,7 @@ from importlib.util import find_spec
 from .cli.main_populate import populate_core
 from .cli.main_media import media_core
 from .cli.main_groups import groups_core
+from .version import version
 
 
 def populate(subparsers):
@@ -35,6 +36,7 @@ def populate(subparsers):
                         help='RDF inputfile')
     parser.add_argument('--parser', '-p', default='reaxys', choices=['reaxys'], type=str, help='Data Format')
     parser.add_argument('--chunk', '-c', default=100, type=int, help='Chunks size')
+    parser.add_argument('--user', '-u', default=1, type=int, help='User id')
     parser.set_defaults(func=populate_core)
 
 
