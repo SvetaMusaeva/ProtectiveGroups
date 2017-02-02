@@ -20,3 +20,17 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 #
+
+
+def init():
+    from pony.orm import sql_debug
+    from .models import db
+    from .config import DEBUG, DB_BASE, DB_DATA, DB_HOST, DB_PASS, DB_USER
+
+    if DEBUG:
+        sql_debug(True)
+        db.bind('sqlite', 'database.sqlite')
+    else:
+        db.bind('postgres', user=DB_USER, password=DB_PASS, host=DB_HOST, database=DB_BASE)
+
+    db.generate_mapping(create_tables=DEBUG)

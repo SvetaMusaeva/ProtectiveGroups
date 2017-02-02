@@ -23,4 +23,7 @@
 
 if __name__ == '__main__':
     from PGAtools.parsers import launcher
+    from PGAtools import init
+
+    init()
     launcher()

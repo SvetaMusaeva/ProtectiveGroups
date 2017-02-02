@@ -23,9 +23,13 @@ from os import path
 
 # dynamic
 DEBUG = False
+DB_USER = None
+DB_PASS = None
+DB_HOST = None
+DB_BASE = None
+DB_DATA = None
 
-
-params = ('DEBUG',)
+params = ('DEBUG', 'DB_USER', 'DB_PASS', 'DB_HOST', 'DB_BASE', 'DB_DATA')
 
 if not path.exists(path.join(path.dirname(__file__), "config.ini")):
     with open(path.join(path.dirname(__file__), "config.ini"), 'w') as f:

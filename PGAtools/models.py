@@ -19,12 +19,12 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 #
-from MWUI.ORM import db, main_tables as mt, save_tables as st, data_tables as dt
+from pony.orm import Database, PrimaryKey, Optional, Required, Set
+from MWUI.ORM import db as mwdb, main_tables as mt, data_tables as dt
 
-User, Subscription, Model, Destination, Additive, Post, BlogPost, TeamPost, Meeting, Thesis, Email, Attachment = mt
-Task, Structure, Result, Additiveset = st
+User, *_ = mt
 Molecule, Reaction = dt
-
+db = Database()
 
 
 class Conditions(db.Entity):
