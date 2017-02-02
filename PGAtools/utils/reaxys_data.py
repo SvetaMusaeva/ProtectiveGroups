@@ -42,5 +42,9 @@ class Parser(object):
                 else:
                     rxds[presection[-1]][self.__fields[section]] = meta_value
 
-        cleaned['rxd'] = list(rxds.values())
+        cleaned['rxd'] = []
+        for x in rxds.values():
+            x['media'] = sorted(x.get('media', []))
+            cleaned['rxd'].append(x)
+
         return cleaned
