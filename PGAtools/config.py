@@ -1,27 +1,31 @@
+# -*- coding: utf-8 -*-
+#
+#  Copyright 2016, 2017 Ramil Nugmanov <stsouko@live.ru>
+#  Copyright 2016 Svetlana Musaeva <sveta_musaeva.95@mail.ru>
+#  This file is part of PGAtools.
+#
+#  PGAtools is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU Affero General Public License as published by
+#  the Free Software Foundation; either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Affero General Public License for more details.
+#
+#  You should have received a copy of the GNU Affero General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
+#
 from os import path
 
 # dynamic
-FP_SIZE = 10
-FP_ACTIVE_BITS = 2
-FRAGMENTOR_VERSION = '15.36'
-FRAGMENT_TYPE_STR = 3
-FRAGMENT_MIN_STR = 2
-FRAGMENT_MAX_STR = 10
-FRAGMENT_TYPE_CGR = 3
-FRAGMENT_MIN_CGR = 2
-FRAGMENT_MAX_CGR = 10
-FRAGMENT_DYNBOND_CGR = 1
 DEBUG = False
-CREATE_TABLES = False
-DB_PASS = None
-DB_HOST = None
-DB_NAME = None
-DB_USER = None
 
 
-params = ('FP_SIZE', 'FP_ACTIVE_BITS', 'FRAGMENTOR_VERSION', 'FRAGMENT_TYPE_STR', 'FRAGMENT_MIN_STR', 'CREATE_TABLES',
-          'FRAGMENT_MAX_STR', 'FRAGMENT_TYPE_CGR', 'FRAGMENT_MIN_CGR', 'FRAGMENT_MAX_CGR', 'FRAGMENT_DYNBOND_CGR',
-          'DB_USER', 'DB_PASS', 'DB_HOST', 'DB_NAME')
+params = ('DEBUG',)
 
 if not path.exists(path.join(path.dirname(__file__), "config.ini")):
     with open(path.join(path.dirname(__file__), "config.ini"), 'w') as f:

@@ -1,25 +1,30 @@
-from functools import reduce
-from pony.orm import Database, PrimaryKey, Optional, Required, LongStr, Set, Json, left_join, sql_debug
-from collections import defaultdict
-from networkx import relabel_nodes
-from bitstring import BitArray
-from networkx.readwrite.json_graph import node_link_graph, node_link_data
-from CGRtools.FEAR import FEAR
-from CGRtools.CGRreactor import CGRreactor
-from CGRtools.CGRcore import CGRcore
-from CGRtools.files import MoleculeContainer, ReactionContainer
-from itertools import chain
-from MODtools.descriptors.fragmentor import Fragmentor
-from .fingerprints import get_fingerprints
-from .config import (FP_SIZE, FRAGMENTOR_VERSION, FRAGMENT_TYPE_CGR, FRAGMENT_MIN_CGR, CREATE_TABLES,
-                     FRAGMENT_MAX_CGR, FRAGMENT_TYPE_STR, FRAGMENT_MIN_STR, FRAGMENT_MAX_STR, FRAGMENT_DYNBOND_CGR,
-                     DB_USER, DB_PASS, DB_HOST, DB_NAME, DEBUG)
+# -*- coding: utf-8 -*-
+#
+#  Copyright 2016, 2017 Ramil Nugmanov <stsouko@live.ru>
+#  Copyright 2016 Svetlana Musaeva <sveta_musaeva.95@mail.ru>
+#  This file is part of PGAtools.
+#
+#  PGAtools is free software; you can redistribute it and/or modify
+#  it under the terms of the GNU Affero General Public License as published by
+#  the Free Software Foundation; either version 3 of the License, or
+#  (at your option) any later version.
+#
+#  This program is distributed in the hope that it will be useful,
+#  but WITHOUT ANY WARRANTY; without even the implied warranty of
+#  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+#  GNU Affero General Public License for more details.
+#
+#  You should have received a copy of the GNU Affero General Public License
+#  along with this program; if not, write to the Free Software
+#  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
+#  MA 02110-1301, USA.
+#
+from MWUI.ORM import db, main_tables as mt, save_tables as st, data_tables as dt
 
+User, Subscription, Model, Destination, Additive, Post, BlogPost, TeamPost, Meeting, Thesis, Email, Attachment = mt
+Task, Structure, Result, Additiveset = st
+Molecule, Reaction = dt
 
-db = Database()
-fear = FEAR(isotop=True)
-cgr_core = CGRcore()
-cgr_reactor = CGRreactor()
 
 
 class Conditions(db.Entity):

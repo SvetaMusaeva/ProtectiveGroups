@@ -1,3 +1,4 @@
+#!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 #
 #  Copyright 2016, 2017 Ramil Nugmanov <stsouko@live.ru>
@@ -19,3 +20,7 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 #
+
+if __name__ == '__main__':
+    from PGAtools.parsers import launcher
+    launcher()
