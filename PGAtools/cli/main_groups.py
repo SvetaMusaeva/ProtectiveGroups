@@ -20,7 +20,7 @@
 #  MA 02110-1301, USA.
 #
 from pony.orm import db_session, select
-from ..models import Groups, Reactions
+from ..models import Group, Reaction
 from CGRtools.files.RDFrw import RDFread
 from CGRtools.CGRcore import CGRcore
 import networkx as nx
@@ -35,6 +35,6 @@ def groups_core(**kwargs):
         for r in inputdata:
             name = r.meta['name']
             r.meta.clear()
-            if not Groups.exists(name=name):
-                g = Groups(name, nx.union_all(r['substrats']), cgr_core.getCGR(r))
+            if not Group.exists(name=name):
+                g = Group(name, nx.union_all(r['substrats']), cgr_core.getCGR(r))
                 # todo: indexation!

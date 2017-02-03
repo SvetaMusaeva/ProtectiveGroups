@@ -21,7 +21,7 @@
 #
 import sys
 from itertools import zip_longest, count
-from pony.orm import db_session
+from pony.orm import db_session, commit
 from CGRtools.files.RDFrw import RDFread
 from ..utils.reaxys_data import Parser as ReaxysParser
 from ..models import Reaction, Molecule, Group, Conditions, User, RawMedia
@@ -70,7 +70,7 @@ def populate_core(**kwargs):
 
         with db_session:
             user = User[1]
-            groups = list(x for x in Group)
+            groups = list(Group.select())
 
             for (m, ms), mf in zip(molecules, mfps):
                 if not Molecule.exists(fear=ms):
@@ -84,6 +84,9 @@ def populate_core(**kwargs):
                     reaction = Reaction(r, user, special=dict(rx_id=meta['rx_id'], db_name='protective_groups'),
                                         fingerprint=r_fp, fear_string=rs, cgr=cgr,
                                         substrats_fears=rms['substrats'], products_fears=rms['products'])
+                    commit()
+                    for g in groups:
+                        g.analyse(reaction)
 
                 media = set()
                 for c in meta['rxd']:

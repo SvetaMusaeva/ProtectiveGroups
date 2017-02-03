@@ -19,6 +19,7 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 #
+from enum import Enum
 from os import path
 
 # dynamic
@@ -28,6 +29,13 @@ DB_PASS = None
 DB_HOST = None
 DB_BASE = None
 DB_DATA = None
+
+
+class GroupStatus(Enum):
+    CLEAVAGE = 0
+    REMAIN = 1
+    TRANSFORM = 2
+
 
 params = ('DEBUG', 'DB_USER', 'DB_PASS', 'DB_HOST', 'DB_BASE', 'DB_DATA')
 
