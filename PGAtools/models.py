@@ -22,19 +22,23 @@
 from networkx.readwrite.json_graph import node_link_graph, node_link_data
 from networkx import union_all
 from bitstring import BitArray
+from itertools import count
 from pony.orm import Database, PrimaryKey, Optional, Required, Set, Json
 from MWUI.ORM import db as mwdb, main_tables as mt, data_tables as dt
-from MWUI.config import FP_SIZE
+from MWUI.config import FP_SIZE, DATA_STEREO, DATA_ISOTOPE
 from CGRtools.CGRreactor import CGRreactor
 from CGRtools.files import MoleculeContainer, ReactionContainer
 from CGRtools.CGRcore import CGRcore
+from CGRtools.FEAR import FEAR
 from .config import DEBUG, GroupStatus
+
 
 User, *_ = mt
 Molecule, Reaction, Conditions = dt
 db = Database()
 cgr_core = CGRcore()
-cgr_rctr = CGRreactor()
+cgr_rctr = CGRreactor(stereo=DATA_STEREO, isotope=DATA_ISOTOPE, hyb=True, neighbors=True)
+fear = FEAR(stereo=DATA_STEREO)
 
 
 class Group(db.Entity):
@@ -67,16 +71,22 @@ class Group(db.Entity):
             self.__cached_transform = g
         return self.__cached_transform
 
+    @property
+    def __center_atoms(self):
+        if self.__cached_center is None:
+            self.__cached_center = fear.get_center_atoms(self.transform)
+        return self.__cached_center
+
     def analyse(self, reactions):
         out = []
         batch = []
         for r in reactions:
             report = dict(cpg=0, rpg=0, tpg=0)
-            gm = cgr_rctr.get_cgr_matcher(union_all(r.structure.substrats), self.group)
+            gm = cgr_rctr.get_cgr_matcher(union_all(r.substrats), self.group)
             uniq_groups = {tuple(sorted(m)) for m in gm.subgraph_isomorphisms_iter()}
 
             if uniq_groups:
-                cgr = cgr_core.getCGR(r.structure)
+                cgr = cgr_core.getCGR(r)
                 for m in uniq_groups:
                     cgrs = cgr.subgraph(m)
                     gm = cgr_rctr.get_cgr_matcher(cgrs, self.transform)
@@ -87,7 +97,6 @@ class Group(db.Entity):
                         gm = cgr_rctr.get_cgr_matcher(cgrs, self.group)
                         if gm.is_isomorphic():
                             batch.append(('remain', r.id, rrr))
-                            GroupReaction(group=self, remain=True, reaction=reaction.id, fingerprint=)
                             report['rpg'] += 1
                         else:
                             batch.append(('transform', r.id, rrr))
@@ -95,44 +104,29 @@ class Group(db.Entity):
                             report['tpg'] += 1
 
                 out.append(report)
-        for g in batch:
-            GroupReaction(group=self, transform=True, reaction=reaction.id, fingerprint=)
-        return out
+        return []
+
+    def analyse_db(self, reactions=None):
+        if reactions is None:
+            result = []
+            page = count(1)
+            while True:
+                reactions = Reaction.select().order_by(Reaction.id).page(next(page), pagesize=50)
+                result.extend(self.analyse(reactions))
+        else:
+            result = self.analyse(reactions)
+
+        report = count()
+        for r, status, fprint in result:
+            if not GroupReaction.exists(group=self, reaction=r.id, status_data=status.value, fingerprint=fprint.bin):
+                GroupReaction(r, self, fprint, status=status)
+                next(report)
+
+        return next(report)
 
     __cached_group = None
     __cached_transform = None
-
-
-class Reactions(db.Entity):
-    def get_conditions(self):
-        if self.__cached_conditions is None:
-            result = {}
-
-            for condition in self.conditions:
-                data = condition.to_dict(exclude='id')
-                data['media'] = {}
-                result[condition.id] = data
-
-            clear_list = []
-            mids = set()
-            clear_name = left_join((c.id, m.name, m.id) for c in Conditions if c.reaction == self
-                                   for rm in c.raw_medias if rm.media for m in rm.media)
-            for *id_name, mid in clear_name:
-                mids.add(mid)
-                clear_list.append(id_name)
-
-            tags_list = defaultdict(list)
-            tags_name = left_join((m.name, t.name) for m in Medias if m.id in mids for t in m.tags)
-            for m, t in tags_name:
-                tags_list[m].append(t)
-
-            raw_name = left_join((c.id, rm.name) for c in Conditions if c.reaction == self
-                                 for rm in c.raw_medias if not rm.media)
-            for i, name in chain(clear_list, raw_name):
-                result[i]['media'][name] = tags_list[name]
-            self.__cached_conditions = list(result.values())
-
-        return self.__cached_conditions
+    __cached_center = None
 
 
 class RawMedia(db.Entity):
@@ -180,10 +174,7 @@ class GroupReaction(db.Entity):
     fingerprint = Required(str) if DEBUG else Required(str, sql_type='bit(%s)' % (2 ** FP_SIZE))
     PrimaryKey(group, reaction)
 
-    def __init__(self, reaction, group, status=GroupStatus.CLEAVAGE, fingerprint=None):
-        if fingerprint is None:
-            fingerprint =
-
+    def __init__(self, reaction, group, fingerprint, status=GroupStatus.CLEAVAGE):
         super(GroupReaction, self).__init__(reaction=reaction.id, group=group, status_data=status.value,
                                             fingerprint=fingerprint.bin)
 
