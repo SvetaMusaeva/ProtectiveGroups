@@ -24,13 +24,13 @@ from networkx import union_all
 from bitstring import BitArray
 from itertools import count
 from pony.orm import Database, PrimaryKey, Optional, Required, Set, Json
-from MWUI.ORM import db as mwdb, main_tables as mt, data_tables as dt
+from MWUI.ORM import main_tables as mt, data_tables as dt
 from MWUI.config import FP_SIZE, DATA_STEREO, DATA_ISOTOPE
 from CGRtools.CGRreactor import CGRreactor
-from CGRtools.files import MoleculeContainer, ReactionContainer
+from CGRtools.files import MoleculeContainer
 from CGRtools.CGRcore import CGRcore
 from CGRtools.FEAR import FEAR
-from .config import DEBUG, GroupStatus
+from .config import DEBUG, GroupStatus, DB_DATA
 
 
 User, *_ = mt
@@ -42,6 +42,7 @@ fear = FEAR(stereo=DATA_STEREO)
 
 
 class Group(db.Entity):
+    _table_ = '%s_group' % DB_DATA if DEBUG else (DB_DATA, 'group')
     id = PrimaryKey(int, auto=True)
     name = Required(str)
     function = Required(str)
@@ -130,6 +131,7 @@ class Group(db.Entity):
 
 
 class RawMedia(db.Entity):
+    _table_ = '%s_raw_media' % DB_DATA if DEBUG else (DB_DATA, 'raw_media')
     id = PrimaryKey(int, auto=True)
     name = Required(str, unique=True)
     media = Optional('Media')
@@ -144,6 +146,7 @@ class RawMedia(db.Entity):
 
 
 class Media(db.Entity):
+    _table_ = '%s_media' % DB_DATA if DEBUG else (DB_DATA, 'media')
     id = PrimaryKey(int, auto=True)
     name = Required(str, unique=True)
     raw = Set('RawMedia')
@@ -162,12 +165,14 @@ class Media(db.Entity):
 
 
 class Tag(db.Entity):
+    _table_ = '%s_tag' % DB_DATA if DEBUG else (DB_DATA, 'tag')
     id = PrimaryKey(int, auto=True)
     name = Required(str, unique=True)
-    medias = Set('Media')
+    medias = Set('Media', table='%s_media_tag' % DB_DATA if DEBUG else (DB_DATA, 'media_tag'))
 
 
 class GroupReaction(db.Entity):
+    _table_ = '%s_group_reaction' % DB_DATA if DEBUG else (DB_DATA, 'group_reaction')
     group = Required('Group')
     reaction = Required(int)
     status_data = Required(int, default=0)
