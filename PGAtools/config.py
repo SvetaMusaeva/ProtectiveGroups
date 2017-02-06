@@ -27,7 +27,7 @@ DEBUG = False
 DB_USER = None
 DB_PASS = None
 DB_HOST = None
-DB_BASE = None
+DB_NAME = None
 DB_DATA = None
 
 
@@ -37,12 +37,15 @@ class GroupStatus(Enum):
     TRANSFORM = 2
 
 
-params = ('DEBUG', 'DB_USER', 'DB_PASS', 'DB_HOST', 'DB_BASE', 'DB_DATA')
+config_list = ('DB_USER', 'DB_PASS', 'DB_HOST', 'DB_BASE', 'DB_DATA')
+
+config_load_list = ['DEBUG']
+config_load_list.extend(config_list)
 
 if not path.exists(path.join(path.dirname(__file__), "config.ini")):
     with open(path.join(path.dirname(__file__), "config.ini"), 'w') as f:
         f.write('\n'.join('%s = %s' % (x, y) for x, y in globals().items()
-                          if x in params))
+                          if x in config_list))
 
 with open(path.join(path.dirname(__file__), "config.ini")) as f:
     for line in f:
@@ -50,7 +53,7 @@ with open(path.join(path.dirname(__file__), "config.ini")) as f:
             k, v = line.split('=')
             k = k.strip()
             v = v.strip()
-            if k in params:
+            if k in config_load_list:
                 globals()[k] = int(v) if v.isdigit() else v
         except:
             pass
