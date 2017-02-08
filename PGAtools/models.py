@@ -37,7 +37,8 @@ from .config import DEBUG, GroupStatus, DB_DATA, FP_DEEP
 User, *_ = mt
 Molecule, Reaction, Conditions = dt
 db = Database()
-cgr_core = CGRcore()
+cgr_core = CGRcore(extralabels=True)
+cgr_core_query = CGRcore()
 cgr_rctr = CGRreactor(stereo=DATA_STEREO, isotope=DATA_ISOTOPE, hyb=True, neighbors=True)
 fear = FEAR(stereo=DATA_STEREO, deep=FP_DEEP)
 
@@ -53,7 +54,7 @@ class Group(db.Entity):
 
     def __init__(self, name, function, transformation):
         sub = union_all(transformation.substrats)
-        cgr = cgr_core.getCGR(transformation)
+        cgr = cgr_core_query.getCGR(transformation)
         super(Group, self).__init__(name=name, function=function,
                                     transform_data=node_link_data(cgr), group_data=node_link_data(sub))
 
@@ -83,7 +84,7 @@ class Group(db.Entity):
         results = []
         out = []
         for r in reactions:
-            substrats_union = union_all(r.substrats)
+            substrats_union = CGRcore.set_labels(union_all(r.substrats))
             uniq_groups = OrderedDict()
             gm = cgr_rctr.get_cgr_matcher(substrats_union, self.group)
             for m in gm.subgraph_isomorphisms_iter():
@@ -93,7 +94,8 @@ class Group(db.Entity):
                                                               [x for x, y in m.items() if y in self.__center_atoms])
             results.append(uniq_groups)
 
-        fingerprints = iter(Molecule.get_fingerprints([x for g in results for x in g.values()]))
+        tmp = [x for g in results for x in g.values()]
+        fingerprints = iter(Molecule.get_fingerprints(tmp) if tmp else [])
 
         for r, uniq_groups in zip(reactions, results):
             report = {GroupStatus.CLEAVAGE: [], GroupStatus.REMAIN: [], GroupStatus.TRANSFORM: []}
