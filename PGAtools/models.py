@@ -133,11 +133,10 @@ class Group(db.Entity):
         report = count()
         for r, res in zip(reactions, result):
             for status, fps in res.items():
-                for fp in fps:
+                for fp, _ in zip(fps, report):
                     if not GroupReaction.exists(group=self, reaction=r.id, status_data=status.value,
                                                 fingerprint=fp.bin):
                         GroupReaction(r, self, fp, status=status)
-                        next(report)
 
         return next(report)
 

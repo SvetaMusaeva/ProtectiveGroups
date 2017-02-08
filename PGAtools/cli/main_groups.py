@@ -19,22 +19,24 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 #
-from pony.orm import db_session, select
-from ..models import Group, Reaction
+from itertools import count
+from pony.orm import db_session
+from ..models import Group
 from CGRtools.files.RDFrw import RDFread
-from CGRtools.CGRcore import CGRcore
-import networkx as nx
-
-cgr_core = CGRcore()
 
 
 def groups_core(**kwargs):
     inputdata = RDFread(kwargs['input'])
-    groups = []
+    groups = count()
+    found = 0
     with db_session:
         for r in inputdata:
-            name = r.meta['name']
+            pg = r.meta['protective_group']
+            fg = r.meta['functional_group']
             r.meta.clear()
-            if not Group.exists(name=name):
-                g = Group(name, nx.union_all(r['substrats']), cgr_core.getCGR(r))
-                # todo: indexation!
+            if not Group.exists(name=pg, function=fg):
+                next(groups)
+                g = Group(pg, fg, r)
+                found += g.analyse_db()
+
+    print('Groups processed\nNew: %d, Found match: %d' % (next(groups), found))
