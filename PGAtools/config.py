@@ -29,6 +29,7 @@ DB_PASS = None
 DB_HOST = None
 DB_NAME = None
 DB_DATA = None
+FP_DEEP = 6
 
 
 class GroupStatus(Enum):
@@ -37,7 +38,7 @@ class GroupStatus(Enum):
     TRANSFORM = 2
 
 
-config_list = ('DB_USER', 'DB_PASS', 'DB_HOST', 'DB_BASE', 'DB_DATA')
+config_list = ('DB_USER', 'DB_PASS', 'DB_HOST', 'DB_BASE', 'DB_DATA', 'FP_DEEP')
 
 config_load_list = ['DEBUG']
 config_load_list.extend(config_list)

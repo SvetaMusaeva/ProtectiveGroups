@@ -19,6 +19,7 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 #
+from collections import OrderedDict
 from networkx.readwrite.json_graph import node_link_graph, node_link_data
 from networkx import union_all
 from bitstring import BitArray
@@ -30,7 +31,7 @@ from CGRtools.CGRreactor import CGRreactor
 from CGRtools.files import MoleculeContainer
 from CGRtools.CGRcore import CGRcore
 from CGRtools.FEAR import FEAR
-from .config import DEBUG, GroupStatus, DB_DATA
+from .config import DEBUG, GroupStatus, DB_DATA, FP_DEEP
 
 
 User, *_ = mt
@@ -38,7 +39,7 @@ Molecule, Reaction, Conditions = dt
 db = Database()
 cgr_core = CGRcore()
 cgr_rctr = CGRreactor(stereo=DATA_STEREO, isotope=DATA_ISOTOPE, hyb=True, neighbors=True)
-fear = FEAR(stereo=DATA_STEREO)
+fear = FEAR(stereo=DATA_STEREO, deep=FP_DEEP)
 
 
 class Group(db.Entity):
@@ -79,49 +80,62 @@ class Group(db.Entity):
         return self.__cached_center
 
     def analyse(self, reactions):
+        results = []
         out = []
-        batch = []
         for r in reactions:
-            report = dict(cpg=0, rpg=0, tpg=0)
-            gm = cgr_rctr.get_cgr_matcher(union_all(r.substrats), self.group)
-            uniq_groups = {tuple(sorted(m)) for m in gm.subgraph_isomorphisms_iter()}
+            substrats_union = union_all(r.substrats)
+            uniq_groups = OrderedDict()
+            gm = cgr_rctr.get_cgr_matcher(substrats_union, self.group)
+            for m in gm.subgraph_isomorphisms_iter():
+                group = tuple(sorted(m))
+                if group not in uniq_groups:
+                    uniq_groups[group] = fear.get_environment(substrats_union,
+                                                              [x for x, y in m.items() if y in self.__center_atoms])
+            results.append(uniq_groups)
 
+        fingerprints = iter(Molecule.get_fingerprints([x for g in results for x in g.values()]))
+
+        for r, uniq_groups in zip(reactions, results):
+            report = {GroupStatus.CLEAVAGE: [], GroupStatus.REMAIN: [], GroupStatus.TRANSFORM: []}
             if uniq_groups:
                 cgr = cgr_core.getCGR(r)
-                for m in uniq_groups:
+                for m, fp in zip(uniq_groups, fingerprints):
                     cgrs = cgr.subgraph(m)
                     gm = cgr_rctr.get_cgr_matcher(cgrs, self.transform)
                     if gm.is_isomorphic():
-                        batch.append(('cleavage', r.id, rrr))
-                        report['cpg'] += 1
+                        report[GroupStatus.CLEAVAGE].append(fp)
                     else:
                         gm = cgr_rctr.get_cgr_matcher(cgrs, self.group)
                         if gm.is_isomorphic():
-                            batch.append(('remain', r.id, rrr))
-                            report['rpg'] += 1
+                            report[GroupStatus.REMAIN].append(fp)
                         else:
-                            batch.append(('transform', r.id, rrr))
+                            report[GroupStatus.TRANSFORM].append(fp)
+            out.append(report)
 
-                            report['tpg'] += 1
-
-                out.append(report)
-        return []
+        return out
 
     def analyse_db(self, reactions=None):
         if reactions is None:
             result = []
+            reactions = []
             page = count(1)
             while True:
-                reactions = Reaction.select().order_by(Reaction.id).page(next(page), pagesize=50)
-                result.extend(self.analyse(reactions))
+                r = Reaction.select().order_by(Reaction.id).page(next(page), pagesize=50)
+                if not r:
+                    break
+                result.extend(self.analyse(x.structure for x in reactions))
+                reactions.extend(r)
         else:
-            result = self.analyse(reactions)
+            result = self.analyse(x.structure for x in reactions)
 
         report = count()
-        for r, status, fprint in result:
-            if not GroupReaction.exists(group=self, reaction=r.id, status_data=status.value, fingerprint=fprint.bin):
-                GroupReaction(r, self, fprint, status=status)
-                next(report)
+        for r, res in zip(reactions, result):
+            for status, fps in res.items():
+                for fp in fps:
+                    if not GroupReaction.exists(group=self, reaction=r.id, status_data=status.value,
+                                                fingerprint=fp.bin):
+                        GroupReaction(r, self, fp, status=status)
+                        next(report)
 
         return next(report)
 
