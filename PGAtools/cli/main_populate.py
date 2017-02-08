@@ -70,7 +70,7 @@ def populate_core(**kwargs):
 
         with db_session:
             user = User[1]
-            groups = list(Group.select())
+            for_analyse = []
 
             for (m, ms), mf in zip(molecules, mfps):
                 if not Molecule.exists(fear=ms):
@@ -79,25 +79,29 @@ def populate_core(**kwargs):
             for (r, rs, cgr), r_fp, rms in zip(cleaned, rfps, lrms):
                 reaction = Reaction.get(string=rs)
                 meta = data_parser.parse(r['meta'])
+                media = set()
                 if not reaction:
                     next(added_data)
                     reaction = Reaction(r, user, special=dict(rx_id=meta['rx_id'], db_name='protective_groups'),
                                         fingerprint=r_fp, fear_string=rs, cgr=cgr,
                                         substrats_fears=rms['substrats'], products_fears=rms['products'])
-                    commit()
-                    for g in groups:
-                        g.analyse(reaction)
-
-                media = set()
-                for c in meta['rxd']:
-                    if not Conditions.exists(data=c, reaction=reaction):
+                    for c in meta['rxd']:
                         Conditions(user=user, data=c, reaction=reaction)
                         media.update(c['media'])
-                        next(upd_data)
+                    for_analyse.append(reaction)
+                else:
+                    next(upd_data)
+                    for c in meta['rxd']:
+                        if not Conditions.exists(data=c, reaction=reaction):
+                            Conditions(user=user, data=c, reaction=reaction)
+                            media.update(c['media'])
 
                 for m in media:
                     if not RawMedia.exists(name=m):
                         RawMedia(name=m)
+            commit()
+            for g in Group.select():
+                g.analyse_db(reactions=for_analyse)
 
-    print('Data processed\nRaw: %d, Clean: %d, Added: %d, Conditions: %d' % next(zip(raw_data, clean_data,
-                                                                                     added_data, upd_data)))
+    print('Data processed\nRaw: %d, Clean: %d, Added: %d, Updated: %d' % next(zip(raw_data, clean_data,
+                                                                                  added_data, upd_data)))
