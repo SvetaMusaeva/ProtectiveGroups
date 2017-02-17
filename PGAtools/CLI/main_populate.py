@@ -23,10 +23,12 @@ import sys
 from itertools import zip_longest, count
 from pony.orm import db_session, commit
 from CGRtools.files.RDFrw import RDFread
+from CGRtools.CGRcore import CGRcore
 from ..utils.reaxys_data import Parser as ReaxysParser
 from ..models import Reaction, Molecule, Group, Conditions, User, RawMedia
 
 
+cgr_core = CGRcore()
 parsers = dict(reaxys=ReaxysParser)
 
 
@@ -53,6 +55,8 @@ def populate_core(**kwargs):
             try:
                 rs, cgr = Reaction.get_fear(r, get_cgr=True)
                 rms = dict(substrats=[], products=[])
+                merged = cgr_core.merge_mols(r)
+                ml_fear = '%s>>%s' % (Molecule.get_fear(merged['substrats']), Molecule.get_fear(merged['products']))
                 for i in ('substrats', 'products'):
                     for m in r[i]:
                         ms = Molecule.get_fear(m)
@@ -60,7 +64,7 @@ def populate_core(**kwargs):
                         molecules.append((m, ms))
 
                 lrms.append(rms)
-                cleaned.append((r, rs, cgr))
+                cleaned.append((r, rs, ml_fear, cgr))
                 next(clean_data)
             except:
                 pass
@@ -76,14 +80,14 @@ def populate_core(**kwargs):
                 if not Molecule.exists(fear=ms):
                     Molecule(m, user, fingerprint=mf, fear_string=ms)
 
-            for (r, rs, cgr), r_fp, rms in zip(cleaned, rfps, lrms):
-                reaction = Reaction.get(string=rs)
+            for (r, rs, ml_fear, cgr), r_fp, rms in zip(cleaned, rfps, lrms):
+                reaction = Reaction.get(fear=rs)
                 meta = data_parser.parse(r['meta'])
                 media = set()
                 if not reaction:
                     next(added_data)
                     reaction = Reaction(r, user, special=dict(rx_id=meta['rx_id'], db_name='protective_groups'),
-                                        fingerprint=r_fp, fear_string=rs, cgr=cgr,
+                                        fingerprint=r_fp, fear_string=rs, cgr=cgr, mapless_fear_string=ml_fear,
                                         substrats_fears=rms['substrats'], products_fears=rms['products'])
                     for c in meta['rxd']:
                         Conditions(user=user, data=c, reaction=reaction)
