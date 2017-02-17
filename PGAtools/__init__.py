@@ -28,7 +28,7 @@ def init():
     from MWUI.config import (DB_NAME as MWUI_DB_NAME, DB_USER as MWUI_DB_USER, DB_HOST as MWUI_DB_HOST,
                              DB_PASS as MWUI_DB_PASS)
     from .models import db
-    from .config import DEBUG, DB_NAME, DB_DATA, DB_HOST, DB_PASS, DB_USER
+    from .config import DEBUG, DB_NAME, DB_HOST, DB_PASS, DB_USER
 
     if DEBUG:
         sql_debug(True)

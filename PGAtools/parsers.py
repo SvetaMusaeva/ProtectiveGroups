@@ -23,9 +23,9 @@
 import argparse
 import importlib
 from importlib.util import find_spec
-from .cli.main_populate import populate_core
-from .cli.main_media import media_core
-from .cli.main_groups import groups_core
+from .CLI.main_populate import populate_core
+from .CLI.main_media import media_core
+from .CLI.main_groups import groups_core
 from .version import version
 
 
