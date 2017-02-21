@@ -84,7 +84,7 @@ class Group(db.Entity):
         results = []
         out = []
         for r in reactions:
-            substrats_union = CGRcore.set_labels(union_all(r.substrats))
+            substrats_union = cgr_core.set_labels(union_all(r.substrats))
             uniq_groups = OrderedDict()
             gm = cgr_rctr.get_cgr_matcher(substrats_union, self.group)
             for m in gm.subgraph_isomorphisms_iter():
@@ -125,10 +125,10 @@ class Group(db.Entity):
                 r = Reaction.select().order_by(Reaction.id).page(next(page), pagesize=50)
                 if not r:
                     break
-                result.extend(self.analyse(x.structure for x in reactions))
+                result.extend(self.analyse([x.structure for x in r]))
                 reactions.extend(r)
         else:
-            result = self.analyse(x.structure for x in reactions)
+            result = self.analyse([x.structure for x in reactions])
 
         report = count()
         for r, res in zip(reactions, result):
@@ -188,11 +188,11 @@ class Tag(db.Entity):
 
 class GroupReaction(db.Entity):
     _table_ = '%s_group_reaction' % DB_DATA if DEBUG else (DB_DATA, 'group_reaction')
+    id = PrimaryKey(int, auto=True)
     group = Required('Group')
     reaction = Required(int)
     status_data = Required(int, default=0)
     fingerprint = Required(str) if DEBUG else Required(str, sql_type='bit(%s)' % (2 ** FP_SIZE))
-    PrimaryKey(group, reaction)
 
     def __init__(self, reaction, group, fingerprint, status=GroupStatus.CLEAVAGE):
         super(GroupReaction, self).__init__(reaction=reaction.id, group=group, status_data=status.value,
