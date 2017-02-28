@@ -42,6 +42,9 @@ cgr_core_query = CGRcore()
 cgr_rctr = CGRreactor(stereo=DATA_STEREO, isotope=DATA_ISOTOPE, hyb=True, neighbors=True)
 fear = FEAR(stereo=DATA_STEREO, deep=FP_DEEP)
 
+_node_marks = ['sp_%s' % mark for mark in ('neighbors', 'hyb', 'stereo', 'charge')]
+_edge_marks = ['sp_%s' % mark for mark in ('bond', 'stereo')]
+
 
 class Group(db.Entity):
     _table_ = '%s_group' % DB_DATA if DEBUG else (DB_DATA, 'group')
@@ -55,6 +58,12 @@ class Group(db.Entity):
     def __init__(self, name, function, transformation):
         sub = union_all(transformation.substrats)
         cgr = cgr_core_query.getCGR(transformation)
+        for _, attr in cgr.nodes(data=True):
+            for m in _node_marks:
+                attr.pop(m, None)
+        for *_, attr in cgr.edges(data=True):
+            for m in _edge_marks:
+                attr.pop(m, None)
         super(Group, self).__init__(name=name, function=function,
                                     transform_data=node_link_data(cgr), group_data=node_link_data(sub))
 
@@ -71,6 +80,7 @@ class Group(db.Entity):
         if self.__cached_transform is None:
             g = node_link_graph(self.transform_data)
             g.__class__ = MoleculeContainer
+            cgr_core.update_sp_marks(g, copy=False)
             self.__cached_transform = g
         return self.__cached_transform
 
