@@ -25,17 +25,16 @@ from networkx import union_all
 from bitstring import BitArray
 from itertools import count
 from pony.orm import Database, PrimaryKey, Optional, Required, Set, Json
-from MWUI.ORM import main_tables as mt, data_tables as dt
+from MWUI.models import User, data_tables
 from MWUI.config import FP_SIZE, DATA_STEREO, DATA_ISOTOPE
 from CGRtools.CGRreactor import CGRreactor
 from CGRtools.files import MoleculeContainer
 from CGRtools.CGRcore import CGRcore
 from CGRtools.FEAR import FEAR
-from .config import DEBUG, GroupStatus, DB_DATA, FP_DEEP
+from .config import DEBUG, GroupStatus, DB_DATA, DB_MWUI_DATA, FP_DEEP
 
 
-User, *_ = mt
-Molecule, Reaction, Conditions = dt
+Molecule, Reaction, Conditions = data_tables[DB_MWUI_DATA]
 db = Database()
 cgr_core = CGRcore(extralabels=True)
 cgr_core_query = CGRcore()
@@ -64,8 +63,8 @@ class Group(db.Entity):
         for *_, attr in cgr.edges(data=True):
             for m in _edge_marks:
                 attr.pop(m, None)
-        super(Group, self).__init__(name=name, function=function,
-                                    transform_data=node_link_data(cgr), group_data=node_link_data(sub))
+        super(Group, self).__init__(name=name, function=function, transform_data=node_link_data(cgr),
+                                    group_data=node_link_data(sub))
 
     @property
     def group(self):
