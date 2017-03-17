@@ -127,20 +127,22 @@ class Group(db.Entity):
 
     def analyse_db(self, reactions=None):
         if reactions is None:
-            result = []
-            reactions = []
             page = count(1)
+            report = 0
             while True:
                 r = Reaction.select().order_by(Reaction.id).page(next(page), pagesize=50)
                 if not r:
                     break
-                result.extend(self.analyse([x.structure for x in r]))
-                reactions.extend(r)
-        else:
-            result = self.analyse([x.structure for x in reactions])
 
+                report += self.__populate(r, self.analyse([x.structure for x in r]))
+        else:
+            report = self.__populate(reactions, self.analyse([x.structure for x in reactions]))
+
+        return report
+
+    def __populate(self, reactions, results):
         report = count()
-        for r, res in zip(reactions, result):
+        for r, res in zip(reactions, results):
             for status, fps in res.items():
                 for fp, _ in zip(fps, report):
                     if not GroupReaction.exists(group=self, reaction=r.id, status_data=status.value,
