@@ -21,12 +21,12 @@
 #
 import sys
 from itertools import zip_longest, count
-from pony.orm import db_session, commit
+from pony.orm import db_session
 from CGRtools.files.RDFrw import RDFread
 from CGRtools.CGRcore import CGRcore
 from MWUI.models import User
 from ..utils.reaxys_data import Parser as ReaxysParser
-from ..models import Reaction, Molecule, Group, Conditions, RawMedia
+from ..models import Reaction, Molecule, Conditions, RawMedia
 from .. import init
 
 
@@ -89,7 +89,7 @@ def populate_core(**kwargs):
                 media = set()
                 if not reaction:
                     next(added_data)
-                    reaction = Reaction(r, user, special=dict(rx_id=meta['rx_id'], db_name='protective_groups'),
+                    reaction = Reaction(r, user, special=dict(rx_id=meta['rx_id']),
                                         fingerprint=r_fp, fear_string=rs, cgr=cgr, mapless_fear_string=ml_fear,
                                         substrats_fears=rms['substrats'], products_fears=rms['products'])
                     for c in meta['rxd']:
@@ -106,9 +106,6 @@ def populate_core(**kwargs):
                 for m in media:
                     if not RawMedia.exists(name=m):
                         RawMedia(name=m)
-            commit()
-            for g in Group.select():
-                g.analyse_db(reactions=for_analyse)
 
     print('Data processed\nRaw: %d, Clean: %d, Added: %d, Updated: %d' % next(zip(raw_data, clean_data,
                                                                                   added_data, upd_data)))
