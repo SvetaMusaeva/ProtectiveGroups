@@ -24,8 +24,9 @@ from itertools import zip_longest, count
 from pony.orm import db_session, commit
 from CGRtools.files.RDFrw import RDFread
 from CGRtools.CGRcore import CGRcore
+from MWUI.models import User
 from ..utils.reaxys_data import Parser as ReaxysParser
-from ..models import Reaction, Molecule, Group, Conditions, User, RawMedia
+from ..models import Reaction, Molecule, Group, Conditions, RawMedia
 from .. import init
 
 

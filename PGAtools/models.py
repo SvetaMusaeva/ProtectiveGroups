@@ -25,7 +25,7 @@ from networkx import union_all
 from bitstring import BitArray
 from itertools import count
 from pony.orm import Database, PrimaryKey, Optional, Required, Set, Json
-from MWUI.models import User, data_tables
+from MWUI.models import data_tables
 from MWUI.config import FP_SIZE, DATA_STEREO, DATA_ISOTOPE
 from CGRtools.CGRreactor import CGRreactor
 from CGRtools.files import MoleculeContainer
