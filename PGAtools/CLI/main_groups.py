@@ -21,11 +21,13 @@
 #
 from itertools import count
 from pony.orm import db_session
-from ..models import Group
 from CGRtools.files.RDFrw import RDFread
+from ..models import Group
+from .. import init
 
 
 def groups_core(**kwargs):
+    init()
     inputdata = RDFread(kwargs['input'])
     groups = count()
     found = 0

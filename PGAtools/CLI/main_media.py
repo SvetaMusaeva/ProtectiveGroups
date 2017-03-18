@@ -23,9 +23,11 @@ import re
 import configparser
 from pony.orm import db_session, select
 from ..models import RawMedia, Media
+from .. import init
 
 
 def media_core(**kwargs):
+    init()
     s = configparser.RawConfigParser(delimiters="<")
     s.optionxform = str
     s.SECTCRE = re.compile(r"\[\| *(?P<header>[^]]+?) *\|\]")

@@ -26,6 +26,7 @@ from CGRtools.files.RDFrw import RDFread
 from CGRtools.CGRcore import CGRcore
 from ..utils.reaxys_data import Parser as ReaxysParser
 from ..models import Reaction, Molecule, Group, Conditions, User, RawMedia
+from .. import init
 
 
 cgr_core = CGRcore()
@@ -33,6 +34,7 @@ parsers = dict(reaxys=ReaxysParser)
 
 
 def populate_core(**kwargs):
+    init()
     inputdata = RDFread(kwargs['input'])
     data_parser = parsers[kwargs['parser']]()
 
