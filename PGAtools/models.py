@@ -24,7 +24,7 @@ from networkx.readwrite.json_graph import node_link_graph, node_link_data
 from networkx import union_all
 from bitstring import BitArray
 from itertools import count
-from pony.orm import Database, PrimaryKey, Optional, Required, Set, Json
+from pony.orm import Database, PrimaryKey, Optional, Required, Set, Json, db_session
 from MWUI.models import data_tables
 from MWUI.config import FP_SIZE, DATA_STEREO, DATA_ISOTOPE
 from CGRtools.CGRreactor import CGRreactor
@@ -52,6 +52,7 @@ class Group(db.Entity):
     function = Required(str)
     transform_data = Required(Json)
     group_data = Required(Json)
+    last_reaction = Required(int, default=0)
     reactions = Set('GroupReaction')
 
     def __init__(self, name, function, transformation):
@@ -127,26 +128,34 @@ class Group(db.Entity):
 
     def analyse_db(self, reactions=None):
         if reactions is None:
-            page = count(1)
             report = 0
-            while True:
-                r = Reaction.select().order_by(Reaction.id).page(next(page), pagesize=50)
+            last_reaction = self.last_reaction
+            for page in count(1):
+                r = Reaction.select(lambda x: x.id > last_reaction).order_by(Reaction.id).page(page, pagesize=50)
                 if not r:
                     break
 
-                report += self.__populate(r, self.analyse([x.structure for x in r]))
+                with db_session:
+                    report += self.__populate(r, self.analyse([x.structure for x in r]))
+                    last_reaction = r[-1].id
+                    Group[self.id].last_reaction = last_reaction
         else:
-            report = self.__populate(reactions, self.analyse([x.structure for x in reactions]))
+            with db_session:
+                report = self.__populate(reactions, self.analyse([x.structure for x in reactions]), check=True)
+                max_id = max(x.id for x in reactions)
+                renewed = Group[self.id].last_reaction
+                if renewed.last_reaction < max_id:
+                    renewed.last_reaction = max_id
 
         return report
 
-    def __populate(self, reactions, results):
+    def __populate(self, reactions, results, check=False):
         report = count()
         for r, res in zip(reactions, results):
             for status, fps in res.items():
                 for fp, _ in zip(fps, report):
-                    if not GroupReaction.exists(group=self, reaction=r.id, status_data=status.value,
-                                                fingerprint=fp.bin):
+                    if not check or not GroupReaction.exists(group=self, reaction=r.id, status_data=status.value,
+                                                             fingerprint=fp.bin):
                         GroupReaction(r, self, fp, status=status)
 
         return next(report)
