@@ -28,17 +28,26 @@ from .. import init
 
 def groups_core(**kwargs):
     init()
-    inputdata = RDFread(kwargs['input'])
-    groups = count()
-    found = 0
-    with db_session:
-        for r in inputdata:
-            pg = r.meta['protective_group']
-            fg = r.meta['functional_group']
-            r.meta.clear()
-            if not Group.exists(name=pg, function=fg):
-                next(groups)
-                g = Group(pg, fg, r)
-                found += g.analyse_db()
 
-    print('Groups processed\nNew: %d, Found match: %d' % (next(groups), found))
+    groups = []
+    if kwargs['input']:
+        inputdata = RDFread(kwargs['input'])
+
+        with db_session:
+            for r in inputdata:
+                pg = r.meta['protective_group']
+                fg = r.meta['functional_group']
+                r.meta.clear()
+
+                if not Group.exists(name=pg, function=fg):
+                    groups.append(Group(pg, fg, r))
+
+        print('Added new groups : %d' % len(groups))
+
+    if kwargs['analyse']:
+        if not groups:
+            with db_session:
+                groups = list(Group.select())
+
+        for g in groups:
+            g.analyse_db()

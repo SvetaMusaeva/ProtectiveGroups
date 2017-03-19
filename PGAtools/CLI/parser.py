@@ -51,8 +51,8 @@ def tag_processing(subparsers):
 def groups_processing(subparsers):
     parser = subparsers.add_parser('groups', help='Reaction groups processing',
                                    formatter_class=ArgumentDefaultsHelpFormatter)
-    parser.add_argument('--input', '-i', default='input.rdf', type=FileType(),
-                        help='RDF inputfile')
+    parser.add_argument('--input', '-i', default=None, type=FileType(), help='RDF inputfile')
+    parser.add_argument('--analyse', '-a', action='store_true', help="analyse groups")
     parser.set_defaults(func=groups_core)
 
 
