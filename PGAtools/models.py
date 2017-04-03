@@ -131,32 +131,35 @@ class Group(db.Entity):
             report = 0
             last_reaction = self.last_reaction
             for page in count(1):
-                r = Reaction.select(lambda x: x.id > last_reaction).order_by(Reaction.id).page(page, pagesize=50)
-                if not r:
-                    break
-
                 with db_session:
-                    report += self.__populate(r, self.analyse([x.structure for x in r]))
+                    r = Reaction.select(lambda x: x.id > last_reaction).order_by(Reaction.id).page(page, pagesize=50)
+                    if not r:
+                        break
+
+                    group = Group[self.id]
+                    report += self.__populate(group, r, self.analyse([x.structure for x in r]))
                     last_reaction = r[-1].id
-                    Group[self.id].last_reaction = last_reaction
+                    group.last_reaction = last_reaction
         else:
             with db_session:
-                report = self.__populate(reactions, self.analyse([x.structure for x in reactions]), check=True)
+                group = Group[self.id]
+                report = self.__populate(group, reactions, self.analyse([x.structure for x in reactions]), check=True)
                 max_id = max(x.id for x in reactions)
-                renewed = Group[self.id].last_reaction
-                if renewed.last_reaction < max_id:
-                    renewed.last_reaction = max_id
+
+                if group.last_reaction < max_id:
+                    group.last_reaction = max_id
 
         return report
 
-    def __populate(self, reactions, results, check=False):
+    @staticmethod
+    def __populate(group, reactions, results, check=False):
         report = count()
         for r, res in zip(reactions, results):
             for status, fps in res.items():
                 for fp, _ in zip(fps, report):
-                    if not check or not GroupReaction.exists(group=self, reaction=r.id, status_data=status.value,
+                    if not check or not GroupReaction.exists(group=group, reaction=r.id, status_data=status.value,
                                                              fingerprint=fp.bin):
-                        GroupReaction(r, self, fp, status=status)
+                        GroupReaction(r, group, fp, status=status)
 
         return next(report)
 

@@ -19,7 +19,6 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 #
-from itertools import count
 from pony.orm import db_session
 from CGRtools.files.RDFrw import RDFread
 from ..models import Group
@@ -49,5 +48,10 @@ def groups_core(**kwargs):
             with db_session:
                 groups = list(Group.select())
 
+        found = 0
         for g in groups:
-            g.analyse_db()
+            gf = g.analyse_db()
+            print('Found: %d' % gf)
+            found += gf
+
+        print('Found match: %d' % found)
