@@ -20,28 +20,46 @@
 #  Foundation, Inc., 51 Franklin Street, Fifth Floor, Boston,
 #  MA 02110-1301, USA.
 #
+from CGRdb import Loader as CGRLoader
+from pony.orm import Database, sql_debug
+from .config import DEBUG, DB_PASS, DB_HOST, DB_USER, DB_NAME, DB_CGR_LIST, DB_DATA_LIST
+from .models import load_tables
 
 
-def init():
-    from pony.orm import sql_debug
-    from MWUI.models import db as mwui_user_db, data_db as mwui_data_db
-    from MWUI.config import (DB_NAME as MWUI_DB_NAME, DB_USER as MWUI_DB_USER, DB_HOST as MWUI_DB_HOST,
-                             DB_PASS as MWUI_DB_PASS)
-    from .models import db
-    from .config import DEBUG, DB_NAME, DB_HOST, DB_PASS, DB_USER, DB_MWUI_DATA
+class Loader:
+    __schemas = {}
+    __databases = {}
+    __cgr_database = {}
 
-    if DEBUG:
-        sql_debug(True)
-        db.bind('sqlite', 'database.sqlite')
-        mwui_user_db.bind('sqlite', 'mwui_database.sqlite')
-        mwui_data_db[DB_MWUI_DATA].bind('sqlite', 'mwui_database.sqlite')
-    else:
-        db.bind('postgres', user=DB_USER, password=DB_PASS, host=DB_HOST, database=DB_NAME)
-        mwui_user_db.bind('postgres', user=MWUI_DB_USER, password=MWUI_DB_PASS, host=MWUI_DB_HOST,
-                          database=MWUI_DB_NAME)
-        mwui_data_db[DB_MWUI_DATA].bind('postgres', user=MWUI_DB_USER, password=MWUI_DB_PASS, host=MWUI_DB_HOST,
-                                        database=MWUI_DB_NAME)
+    @classmethod
+    def load_schemas(cls):
+        if not cls.__schemas:
+            if DEBUG:
+                sql_debug(True)
 
-    db.generate_mapping(create_tables=DEBUG)
-    mwui_user_db.generate_mapping(create_tables=DEBUG)
-    mwui_data_db[DB_MWUI_DATA].generate_mapping(create_tables=DEBUG)
+            CGRLoader.load_schemas()
+            for cgr_schema, schema in zip(DB_CGR_LIST, DB_DATA_LIST):
+                x = Database()
+                cgr_molecule, cgr_reaction, *_ = CGRLoader.get_database(cgr_schema)
+
+                cls.__schemas[schema] = x
+                cls.__databases[schema] = load_tables(x, schema, cgr_molecule, cgr_reaction)
+                cls.__cgr_database[schema] = cgr_schema
+                if DEBUG:
+                    x.bind('sqlite', 'database.sqlite')
+                else:
+                    x.bind('postgres', user=DB_USER, password=DB_PASS, host=DB_HOST, database=DB_NAME)
+
+                x.generate_mapping(create_tables=True)
+
+    @classmethod
+    def list_databases(cls):
+        return cls.__databases
+
+    @classmethod
+    def get_database(cls, name):
+        return cls.__databases[name]
+
+    @classmethod
+    def get_cgr_database(cls, name):
+        return CGRLoader.get_database(cls.__cgr_database[name])

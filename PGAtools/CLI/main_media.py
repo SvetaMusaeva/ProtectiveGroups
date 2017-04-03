@@ -22,12 +22,13 @@
 import re
 import configparser
 from pony.orm import db_session, select
-from ..models import RawMedia, Media
-from .. import init
+from .. import Loader
 
 
 def media_core(**kwargs):
-    init()
+    Loader.load_schemas()
+    RawMedia, Media = Loader.get_database(kwargs['database'])[-3:-1]
+
     s = configparser.RawConfigParser(delimiters="<")
     s.optionxform = str
     s.SECTCRE = re.compile(r"\[\| *(?P<header>[^]]+?) *\|\]")

@@ -21,12 +21,12 @@
 #
 from pony.orm import db_session
 from CGRtools.files.RDFrw import RDFread
-from ..models import Group
-from .. import init
+from .. import Loader
 
 
 def groups_core(**kwargs):
-    init()
+    Loader.load_schemas()
+    Group = Loader.get_database(kwargs['database'])[0]
 
     groups = []
     if kwargs['input']:
