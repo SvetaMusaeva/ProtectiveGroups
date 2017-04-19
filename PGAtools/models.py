@@ -128,10 +128,9 @@ def load_tables(db, schema, cgr_molecule, cgr_reaction):
             if reactions is None:
                 report = 0
                 last_reaction = self.last_reaction
-                for page in count(1):
+                while True:
                     with db_session:
-                        r = cgr_reaction.select(lambda x:
-                                                x.id > last_reaction).order_by(cgr_reaction.id).page(page, pagesize=50)
+                        r = cgr_reaction.select(lambda x: x.id > last_reaction).order_by(cgr_reaction.id).limit(50)
                         if not r:
                             break
 
